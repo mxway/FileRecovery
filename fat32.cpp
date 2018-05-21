@@ -1,12 +1,19 @@
 #include "fat32.h"
 #include <shlwapi.h>
+#include <windows.h>
+#include <queue>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 #include "commutil.h"
 
 #pragma comment(lib,"shlwapi.lib")
 
+using namespace std;
+
 CFat32FileSystem::CFat32FileSystem(IBaseReader	*prmReader)
-	:CBaseFileSystem(prmReader)
+	:CBaseFileSystem(prmReader), m_clusterFlag(NULL)
 {
 	m_fatTable = NULL;
 }
@@ -14,6 +21,7 @@ CFat32FileSystem::CFat32FileSystem(IBaseReader	*prmReader)
 CFat32FileSystem::~CFat32FileSystem()
 {
 	free(m_fatTable);
+	free(m_clusterFlag);
 }
 
 void CFat32FileSystem::Init()
@@ -28,6 +36,12 @@ void CFat32FileSystem::Init()
 	{
 		return;
 	}
+	m_clusterFlag = (UCHAR *)malloc(sizeof(UCHAR)*m_fatNum);
+	if (m_clusterFlag == NULL)
+	{
+		return;
+	}
+	memset(m_clusterFlag, 0, m_fatNum);
 	//读取文件分配表
 	this->ReadBuf((UCHAR*)m_fatTable, m_fatSector.BPB_ResvdSecCnt, sizeof(UINT32)*m_fatNum);
 	m_bytesPerSector = m_fatSector.BPB_BytsPerSec;
@@ -317,6 +331,94 @@ vector<CBaseFileObject*> *CFat32FileSystem::GetChildren(CBaseFileObject *prmPare
 	return tmpArray;
 }
 
+void CFat32FileSystem::GetDeletedFiles(vector<FileInfo *> &fileArray, UINT32 *prmRunningFlag)
+{
+	TCHAR	fileName[MAX_PATH] = { 0 };
+	//FileInfo	fileInfo;
+	UINT32	clusNum = 0;
+	UINT64	offset = 0;
+	queue<UINT32> dirs;
+	//this->FreeArray(fileArray);
+	dirs.push(2);//首先把root的簇号放到队列中
+
+	UINT32	clusterSize = m_fatSector.BPB_BytsPerSec*m_fatSector.BPB_SecPerClus;
+	UCHAR	*szBuf = (UCHAR*)malloc(sizeof(UCHAR)*clusterSize);
+	while (!dirs.empty() && (*prmRunningFlag))
+	{
+		clusNum = dirs.front();
+		dirs.pop();
+		//遍历文件夹的第个簇
+		while (*prmRunningFlag)
+		{
+			offset = m_fatSector.BPB_FATSz32 * m_fatSector.BPB_NumFATs;
+			offset += m_fatSector.BPB_ResvdSecCnt;
+			offset += (clusNum - m_fatSector.BPB_RootClus)*m_fatSector.BPB_SecPerClus;
+			this->ReadBuf(szBuf, offset, clusterSize);
+
+			//遍历簇中的每个文件项
+			for (UINT32 i = 0; i < clusterSize && (*prmRunningFlag); i += 32)
+			{
+				DIR_ENTRY_s *dirEntry = (DIR_ENTRY_s*)(szBuf + i);
+				if (dirEntry->name[0] == 0)
+				{
+					break;
+				}
+				if (dirEntry->size == 0 || dirEntry->size == 0xFFFFFFFF)
+				{
+					//如果是文件夹，则需要分析文件夹中是否在删除的文件
+					UINT32	tmpClusterNum = this->ParseStartCluster(dirEntry);
+					if (tmpClusterNum != 0 && tmpClusterNum < m_fatNum && m_clusterFlag[tmpClusterNum] == 0)
+					{
+						dirs.push(tmpClusterNum);
+						m_clusterFlag[tmpClusterNum] = 1;//避免重复对同一簇进行分析
+					}
+					//dirs.push(this->ParseStartCluster(dirEntry));
+				}
+
+				//记录当前文件项
+				DIR_ENTRY_s *firstEntry = dirEntry;
+				//找到第一个非长文件名标志的文件项
+				while (dirEntry->attr == 0x0F)
+				{
+					i += 32;
+					dirEntry = (DIR_ENTRY_s *)(szBuf + i);
+				}
+				//被删除的文件
+				if (dirEntry->name[0] == 0xE5 && dirEntry->size != 0 && dirEntry->size != 0xFFFFFFFF)
+				{
+					if (firstEntry == dirEntry)
+					{
+						this->ParseShortFileName(dirEntry, fileName, MAX_PATH);
+					}
+					else
+					{
+						this->ParseLongFileName(fileName, MAX_PATH, firstEntry, dirEntry);
+					}
+					FileInfo *fileInfo = new FileInfo;
+					if (fileInfo == NULL)
+					{
+						break;
+					}
+					fileInfo->fileName = fileName;
+					fileInfo->fileSize = this->ParseFileSize(dirEntry);
+					fileInfo->m_fileExtent = NULL;
+					this->ParseFileExtent(dirEntry, &fileInfo->m_fileExtent);
+					this->ParseAccessDate(dirEntry, fileInfo);
+					this->ParseCreateDate(dirEntry, fileInfo);
+					this->ParseModifyDate(dirEntry, fileInfo);
+					fileArray.push_back(fileInfo);
+				}
+			}
+			clusNum = this->GetNextCluster(clusNum);
+			if (clusNum == 0)
+			{
+				break;
+			}
+		}
+	}
+	free(szBuf);
+}
+
 UINT32	CFat32FileSystem::GetNextCluster(UINT32 prmCurCluster)
 {
 	if (prmCurCluster >= m_fatNum)
@@ -445,4 +547,81 @@ CBaseFileObject *CFat32FileSystem::ParseFileObject(DIR_ENTRY_s *prmFirstEntry,DI
 		tmpFileObject->SetFileType(FILE_OBJECT_TYPE_FILE);
 	}
 	return tmpFileObject;
+}
+
+UINT32 CFat32FileSystem::ParseFileExtent(DIR_ENTRY_s *dirEntry, File_Content_Extent_s **prmExtent)
+{
+	File_Content_Extent_s *p = *prmExtent;
+	UINT32	baseSector = m_fatSector.BPB_NumFATs*m_fatSector.BPB_FATSz32 + m_fatSector.BPB_ResvdSecCnt;
+	UINT32	startCluster = this->ParseStartCluster(dirEntry);
+	UINT32	clusterSize = m_fatSector.BPB_SecPerClus;
+	if (startCluster == 0)
+	{
+		return 0;
+	}
+	if (p == NULL)
+	{
+		p = new File_Content_Extent_s;
+		*prmExtent = p;
+	}
+	p->startSector = startCluster*m_fatSector.BPB_SecPerClus + baseSector - m_fatSector.BPB_RootClus*m_fatSector.BPB_SecPerClus;
+	UINT32 fileSize = dirEntry->size;
+	fileSize += 511;
+	fileSize = fileSize & ~(511);
+	p->totalSector = fileSize >> 9;
+
+	return 1;
+}
+
+void CFat32FileSystem::ParseCreateDate(DIR_ENTRY_s *dirEntry, FileInfo *fileInfo)
+{
+	if (fileInfo == NULL)
+	{
+		return;
+	}
+	char	szBuf[128] = { 0 };
+	USHORT	time = dirEntry->ctime;
+	USHORT	date = dirEntry->cdate;
+	UINT8   hour = (time & 0xF800) >> 11;
+	UINT8   minute = (time & 0x7E0) >> 5;
+	UINT8	second = (time & 0x1F);
+	UINT8	year = (date & 0xFE00) >> 9;
+	UINT8   month = (date & 0x1E0) >> 5;
+	UINT8	day = (date & 0x1F);
+	sprintf_s(szBuf, 128, _T("%04d-%02d-%02d %02d:%02d:%02d"), year + 1980, month, day, hour, minute, second);
+	fileInfo->createDate = szBuf;
+}
+
+void CFat32FileSystem::ParseModifyDate(DIR_ENTRY_s *dirEntry, FileInfo *fileInfo)
+{
+	if (fileInfo == NULL)
+	{
+		return;
+	}
+	char	szBuf[128] = { 0 };
+	USHORT	time = dirEntry->time;
+	USHORT	date = dirEntry->date;
+	UINT8   hour = (time & 0xF800) >> 11;
+	UINT8   minute = (time & 0x7E0) >> 5;
+	UINT8	second = (time & 0x1F);
+	UINT8	year = (date & 0xFE00) >> 9;
+	UINT8   month = (date & 0x1E0) >> 5;
+	UINT8	day = (date & 0x1F);
+	sprintf_s(szBuf, 128, _T("%04d-%02d-%02d %02d:%02d:%02d"), year + 1980, month, day, hour, minute, second);
+	fileInfo->modifyDate = szBuf;
+}
+
+void CFat32FileSystem::ParseAccessDate(DIR_ENTRY_s *dirEntry, FileInfo *fileInfo)
+{
+	if (fileInfo == NULL)
+	{
+		return;
+	}
+	char	szBuf[128] = { 0 };
+	USHORT	date = dirEntry->adate;
+	UINT8	year = (date & 0xFE00) >> 9;
+	UINT8   month = (date & 0x1E0) >> 5;
+	UINT8	day = (date & 0x1F);
+	sprintf_s(szBuf, 128, _T("%04d-%02d-%02d"), year + 1980, month, day);
+	fileInfo->modifyDate = szBuf;
 }

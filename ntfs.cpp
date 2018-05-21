@@ -167,6 +167,87 @@ vector<CBaseFileObject*> *CNtfsFileSystem::GetChildren(CBaseFileObject *prmParen
 	return tmpFileArray;
 }
 
+void CNtfsFileSystem::GetDeletedFiles(vector<FileInfo *> &fileArray, UINT32 *prmRunningFlag)
+{
+	//this->FreeArray(fileArray);
+	UINT32	clusterSize = m_sectorsPerCluster * m_bytesPerSector;
+	TCHAR	szFileName[MAX_PATH * 2] = { 0 };
+	TCHAR	szAnsiName[MAX_PATH * 2] = { 0 };
+	TCHAR	szAttrValue[1024] = { 0 };
+	UINT32	nameLenOffset = 0;
+	UINT32	nameLen = 0;
+	UINT16  usnOffset = 0;
+	//FileInfo	fileInfo;
+	//分配一个簇的大小
+	UCHAR	*szBuf = (UCHAR*)malloc(sizeof(UCHAR)*clusterSize);
+	if (szBuf == NULL)
+	{
+		return;
+	}
+	Ntfs_Data_Run	*p = m_mftRunList;
+	//遍历mft 0x80属性所有运行数据，运行数据所存数据为mft记录头。每个mft记录头1024字节
+	while (p != NULL && (*prmRunningFlag))
+	{
+		for (int i = 0; i < p->length && (*prmRunningFlag); i++)
+		{
+			UINT64	clusterOffset = p->lcn*m_sectorsPerCluster + i*m_sectorsPerCluster;
+			this->ReadBuf(szBuf, clusterOffset, clusterSize);
+			usnOffset = *(UINT16*)&szBuf[4];
+			for (UINT32 j = 0; j < m_sectorsPerCluster; j++)
+			{
+				memcpy(szBuf + 0x1FE + j*m_bytesPerSector, szBuf + usnOffset + 2 + j * 2, 2);//恢复每个扇区最后两个字节数据
+			}
+			for (UINT32 j = 0; j < clusterSize && (*prmRunningFlag); j += 1024)
+			{
+				if (szBuf[j + 0x16] == 0)
+				{
+#ifdef _DEBUG
+					UINT64 seqNo = p->vcn*m_sectorsPerCluster / 2;
+					seqNo += i*m_sectorsPerCluster / 2 + j / 1024;
+#endif
+					//fileInfo.seqNo = p->vcn*m_ntfsType->sectorsPerCluster / 2;
+					//fileInfo.seqNo += i*m_ntfsType->sectorsPerCluster / 2 + j / 1024;
+					if (!this->GetAttrValue(ATTR_FILE_NAME, szBuf + j, (UCHAR*)szAttrValue))
+					{
+						continue;
+					}
+					nameLenOffset = 0x58;
+					nameLen = *(UINT8*)(szAttrValue + nameLenOffset);
+					//获取文件名
+					memset(szFileName, 0, sizeof(szFileName));
+					memcpy(szFileName, szAttrValue + nameLenOffset + 2, nameLen << 1);
+					::WideCharToMultiByte(CP_THREAD_ACP, 0, (LPCWSTR)szFileName, -1, szAnsiName, MAX_PATH * 2, 0, 0);
+					FileInfo *fileInfo = new FileInfo;
+					if (fileInfo == NULL)
+					{
+						break;
+					}
+					fileInfo->fileName = "";
+					fileInfo->fileSize = 0;
+					fileInfo->m_fileExtent = NULL;
+					fileInfo->fileName = szAnsiName;
+					//获取文件由哪些簇组成
+					this->GetFileExtent(&szBuf[j], clusterOffset + j / 512, &fileInfo->m_fileExtent);
+					if (fileInfo->m_fileExtent == NULL)
+					{
+						delete fileInfo;
+						continue;
+					}
+					//this->FreeFileExtent(fileInfo->m_fileExtent);
+					//delete fileInfo;
+					fileInfo->fileSize = this->GetFileSize(szBuf + j);
+					//fileInfo->accessDate = this->GetAccessDate(szBuf + j);
+					//fileInfo->createDate = this->GetCreateDate(szBuf + j);
+					//fileInfo->modifyDate = this->GetModifyDate(szBuf + j);
+					fileArray.push_back(fileInfo);
+				}
+			}
+		}
+		p = p->next;
+	}
+	free(szBuf);
+}
+
 void CNtfsFileSystem::GetMFTRunList()
 {
 	UCHAR	tmpBuf[1024] = { 0 };

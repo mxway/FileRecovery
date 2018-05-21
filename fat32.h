@@ -53,6 +53,14 @@ public:
 	**************************************/
 	virtual	vector<CBaseFileObject*> *GetChildren(CBaseFileObject *prmParentDirectory);
 
+	/***
+	*
+	* 获取ntfs文件系统中已补删除的文件
+	* @param fileArray。用于存放被删除文件信息
+	*
+	***/
+	virtual void	GetDeletedFiles(vector<FileInfo*> &fileArray, UINT32 *prmRunningFlag);
+
 private:
 
 	/***
@@ -81,10 +89,22 @@ private:
 	*
 	**************************************/
 	CBaseFileObject	*ParseFileObject(DIR_ENTRY_s *prmFirstEntry,DIR_ENTRY_s *prmLastEntry);
+
+	UINT32	ParseFileSize(DIR_ENTRY_s *dirEntry) { return dirEntry->size; }
+
+	//
+	UINT32	ParseFileExtent(DIR_ENTRY_s *dirEntry, File_Content_Extent_s **prmExtent);
+
+	void  ParseCreateDate(DIR_ENTRY_s *dirEntry, FileInfo *fileInfo);
+
+	void ParseModifyDate(DIR_ENTRY_s *dirEntry, FileInfo *fileInfo);
+
+	void ParseAccessDate(DIR_ENTRY_s *dirEntry, FileInfo *fileInfo);
 private:
 	FAT32_s m_fatSector;
 	UINT32	*m_fatTable;
 	UINT32	m_fatNum;
+	UCHAR	*m_clusterFlag;//用于标识哪些簇已经被处理过，以免重复处理
 };
 
 #endif

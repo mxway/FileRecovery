@@ -222,4 +222,14 @@ typedef struct _NTFS_Data_Run
 }Ntfs_Data_Run;
 #pragma pack(pop)
 
+typedef struct _FileInfo
+{
+	string	fileName;
+	UINT64	fileSize;
+	string  createDate;
+	string  modifyDate;
+	string  accessDate;
+	File_Content_Extent_s *m_fileExtent;
+}FileInfo;
+
 #endif

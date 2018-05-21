@@ -15,6 +15,7 @@
 #include <vector>
 #include "File.h"
 #include "reader.h"
+#include "commutil.h"
 
 using namespace std;
 
@@ -77,6 +78,14 @@ public:
 	**************************************/
 	virtual UINT64	ReadFileContent(CBaseFileObject *prmFileObject,
 		UCHAR prmDstBuf[], UINT64 prmByteOff, UINT64 prmByteToRead) = 0;
+
+	/***
+	*
+	* 获取ntfs文件系统中已补删除的文件
+	* @param fileArray。用于存放被删除文件信息
+	*
+	***/
+	virtual void	GetDeletedFiles(vector<FileInfo*> &fileArray, UINT32 *prmRunningFlag) = 0;
 
 	/*************************************
 	*

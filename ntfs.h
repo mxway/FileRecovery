@@ -66,6 +66,14 @@ public:
 	**************************************/
 	virtual	vector<CBaseFileObject*> *GetChildren(CBaseFileObject *prmParentDirectory);
 
+	/***
+	*
+	* 获取ntfs文件系统中已补删除的文件
+	* @param fileArray。用于存放被删除文件信息
+	*
+	***/
+	virtual void	GetDeletedFiles(vector<FileInfo*> &fileArray, UINT32 *prmRunningFlag);
+
 private:
 
 	/*************************************
