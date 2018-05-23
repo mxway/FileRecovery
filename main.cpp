@@ -1,14 +1,19 @@
 #include <stdio.h>
-#include "FileSystem.h"
+#ifdef _DEBUG
+#include <vld.h>
+#endif
+#include "FileSystemFactory.h"
 
 int main()
 {
-	IBaseReader	*tmpReader = new CSectorReader;
-	if (!tmpReader->OpenDevice(TEXT("D:\\")))
+	CBaseFileSystem	*fileSystem = CFileSystemFactory::GetFileSystem(TEXT("F:\\"));
+	vector<CBaseFileObject *> fileArray;
+	fileSystem->GetDeletedFiles(fileArray);
+
+	delete fileSystem;
+	for (int i = 0; i < fileArray.size(); i++)
 	{
-		delete tmpReader;
-		return -1;
+		fileArray[i]->Destroy();
 	}
-	
 	return 0;
 }

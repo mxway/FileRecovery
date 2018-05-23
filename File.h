@@ -54,25 +54,6 @@ public:
 
 	/*************************************
 	*
-	*	函数名：	SetPath
-	*	函数说明：	设置文件所在路径
-	*	参数描述：	const CStringUtil & prmPath
-	*	返回值：	void
-	*
-	**************************************/
-	void		SetPath(const CStringUtil &prmPath);
-
-	/*************************************
-	*
-	*	函数名：	GetPath
-	*	函数说明：	获取文件所在路径
-	*	返回值：	const CStringUtil
-	*
-	**************************************/
-	const CStringUtil	&GetPath();
-
-	/*************************************
-	*
 	*	函数名：	SetFileName
 	*	函数说明：	设置文件名称
 	*	参数描述：	const CStringUtil & prmFileName
@@ -131,7 +112,6 @@ public:
 
 	void		Destroy();
 private:
-	CStringUtil		m_path;//文件所在路径
 	CStringUtil		m_fileName;//文件名称，文件绝对路径 = m_path+m_fileName
 	UINT64			m_startSector;//文件在分区中的起始扇区
 	UINT64			m_fileSize;//文件大小

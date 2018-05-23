@@ -85,28 +85,7 @@ public:
 	* @param fileArray。用于存放被删除文件信息
 	*
 	***/
-	virtual void	GetDeletedFiles(vector<FileInfo*> &fileArray, UINT32 *prmRunningFlag) = 0;
-
-	/*************************************
-	*
-	*	函数名：	GetFileObjectByPath
-	*	函数说明：	根据文件的路径获取文件对象
-	*	参数描述：	@param prmFileName[输入参数]文件名字符串
-	*	返回值：	如果在文件系统中成功找到prmFileName文件返回CBaseFileObject对象
-	*				否则返回NULL
-	*
-	**************************************/
-	virtual	CBaseFileObject	*GetFileObjectByPath(LPCTSTR prmFileName) = 0;
-
-	/*************************************
-	*
-	*	函数名：	GetChildren
-	*	函数说明：	获取目录中的所有子文件/文件夹对象
-	*	参数描述：	@param prmParentDirectory[输入参数]父目录的对象
-	*	返回值：	vector<CBaseFileObject*> *
-	*
-	**************************************/
-	virtual	vector<CBaseFileObject*> *GetChildren(CBaseFileObject *prmParentDirectory) = 0;
+	virtual void	GetDeletedFiles(vector<CBaseFileObject*> &fileArray) = 0;
 
 	/*************************************
 	*

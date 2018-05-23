@@ -12,16 +12,6 @@ CBaseFileObject::~CBaseFileObject()
 
 }
 
-void CBaseFileObject::SetPath(const CStringUtil &prmPath)
-{
-	m_path = prmPath;
-}
-
-const	CStringUtil &CBaseFileObject::GetPath()
-{
-	return m_path;
-}
-
 void	CBaseFileObject::SetFileName(const CStringUtil &prmFileName)
 {
 	m_fileName = prmFileName;

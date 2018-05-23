@@ -38,7 +38,6 @@ void CNtfsFileSystem::Init()
 	}
 	m_rootDirectory->SetFileStartSector(m_mftStartCluster * m_sectorsPerCluster + 10);
 	m_rootDirectory->SetFileName(TEXT(""));
-	m_rootDirectory->SetPath(TEXT(""));
 	m_rootDirectory->SetFileSize(0);
 	m_rootDirectory->SetFileType(FILE_OBJECT_TYPE_ROOT);
 }
@@ -58,116 +57,11 @@ UINT64	CNtfsFileSystem::ReadFileContent(CBaseFileObject *prmFileObject, UCHAR pr
 	}
 	UINT64		tmpResult = this->ReadFileContent(prmDstBuf,prmByteOff,prmByteToRead,
 		prmFileObject->GetFileSize(),tmpFileExtent);
-	/*UINT64	tmpResult = this->ReadFileContent(prmDstBuf,prmByteOff,prmByteToRead,
-		prmFileObject->GetFileStartSector(),tmpFileExtent);*/
 	this->FreeFileExtent(tmpFileExtent);
 	return tmpResult;
 }
 
-CBaseFileObject *CNtfsFileSystem::GetFileObjectByPath(LPCTSTR prmFileName)
-{
-	UCHAR		tmpBuf[1024] = {0};
-	TCHAR		tmpFullName[MAX_PATH*2+2] = {0};
-	UINT64	tmpFileOffset = this->GetRootDirectory()->GetFileStartSector();
-	tmpFileOffset = tmpFileOffset*m_bytesPerSector;
-	size_t i=0;
-	CStringUtil		tmpFileName=prmFileName;
-	vector<CStringUtil>		tmpFileArray;
-	tmpFileName.ReplaceStr(TEXT("/"),TEXT("\\"));
-	tmpFileName.SplitString(tmpFileArray,TEXT("\\"));
-	memcpy(tmpFullName,prmFileName,_tcslen(prmFileName)*sizeof(TCHAR));
-	for(i=0;i<tmpFileArray.size();i++)
-	{
-		tmpFileOffset = this->GetOffsetByFileName(tmpFileOffset,tmpFileArray[i]);
-		if(tmpFileOffset==0)
-		{
-			break;
-		}
-	}
-	if(tmpFileOffset==0)
-	{
-		return NULL;
-	}
-	this->ReadBuf(tmpBuf,tmpFileOffset/m_bytesPerSector,1024);
-	UINT16	tmpUsnOffset = *(UINT16*)&tmpBuf[4];//更新序列号的偏移值
-	memcpy(tmpBuf+0x1FE,tmpBuf+tmpUsnOffset+2,2);
-	memcpy(tmpBuf+0x3FE,tmpBuf+tmpUsnOffset+4,2);
-	CBaseFileObject	*tmpFileObject = new CBaseFileObject;
-	::PathRemoveFileSpec(tmpFullName);
-	tmpFileObject->SetPath(tmpFullName);
-	tmpFileObject->SetFileName(tmpFileArray[tmpFileArray.size()-1]);
-	tmpFileObject->SetFileStartSector(tmpFileOffset/m_bytesPerSector);
-	tmpFileObject->SetFileName(this->GetFileWin32Name(tmpFileOffset));
-	tmpFileObject->SetFileSize(this->GetFileSize(tmpBuf));
-	tmpFileObject->SetFileType(this->GetFileType(tmpBuf));
-	return tmpFileObject;
-	//this->SetFileWin32Name(tmpFileOffset,tmpFileObject);
-	//return tmpFileOffset;
-}
-
-vector<CBaseFileObject*> *CNtfsFileSystem::GetChildren(CBaseFileObject *prmParentDirectory)
-{
-	UCHAR		tmpBuf[1024] = {0};
-	UCHAR		tmpAttrValue[1024] = {0};
-	UCHAR		tmpAttrList[1024] = {0};
-	UCHAR		tmpExtentMFTValue[1024] = {0};
-	if(prmParentDirectory==NULL || prmParentDirectory->GetFileType()==FILE_OBJECT_TYPE_FILE)
-	{
-		return NULL;
-	}
-	vector<CBaseFileObject*> *tmpFileArray = new vector<CBaseFileObject*>;
-	this->ReadBuf(tmpBuf,prmParentDirectory->GetFileStartSector(),1024);
-	UINT16	tmpUsnOffset = *(UINT16*)&tmpBuf[4];//更新序列号的偏移值
-	memcpy(tmpBuf+0x1FE,tmpBuf+tmpUsnOffset+2,2);
-	memcpy(tmpBuf+0x3FE,tmpBuf+tmpUsnOffset+4,2);
-	//获取ATTR_LIST $0x20列表属性
-	if(this->GetAttrValue(ATTR_ATTRIBUTE_LIST,tmpBuf,tmpAttrList))
-	{
-		UINT32	tmpOffset = 0x18;
-		while(tmpOffset=this->GetAttrFromAttributeList(ATTR_INDEX_ROOT,tmpOffset,tmpAttrList,tmpAttrValue))
-		{
-			UINT16	*tmpLen = (UINT16*)(tmpAttrValue+4);
-			tmpOffset += *tmpLen;
-			UINT64	seqNum = *(UINT64*)&tmpAttrValue[0x10];
-			seqNum = seqNum & MFTREFMASK;
-			this->GetExtendMFTAttrValue(seqNum,ATTR_INDEX_ROOT,tmpExtentMFTValue);
-			this->GetFileFromIndexRoot(tmpExtentMFTValue,tmpFileArray);
-			//this->ParseFileFromIndex(tmpExtentMFTValue,1024,tmpFileArray);
-		}
-
-		tmpOffset = 0x18;
-		while(tmpOffset=this->GetAttrFromAttributeList(ATTR_INDEX_ALLOCATION,tmpOffset,tmpAttrList,tmpAttrValue))
-		{
-			UINT16	*tmpLen = (UINT16*)(tmpAttrValue+4);
-			tmpOffset += *tmpLen;
-			UINT64	seqNum = *(UINT64*)&tmpAttrValue[0x10];
-			seqNum = seqNum & MFTREFMASK;
-			this->GetExtendMFTAttrValue(seqNum,ATTR_INDEX_ALLOCATION,tmpExtentMFTValue);
-			this->GetFileFromAllocIndex(tmpExtentMFTValue,tmpFileArray);
-		}
-	}
-	if(this->GetAttrValue(ATTR_INDEX_ROOT,tmpBuf,tmpAttrValue))
-	{
-		this->GetFileFromIndexRoot(tmpAttrValue,tmpFileArray);
-	}
-	if(this->GetAttrValue(ATTR_INDEX_ALLOCATION,tmpBuf,tmpAttrValue))
-	{
-		this->GetFileFromAllocIndex(tmpAttrValue,tmpFileArray);
-	}
-	CStringUtil  tmpPath = prmParentDirectory->GetPath();
-	if(prmParentDirectory->GetFileType()!=FILE_OBJECT_TYPE_ROOT)
-	{
-		tmpPath.Append(TEXT("\\")).Append(prmParentDirectory->GetFileName());
-	}
-	for(size_t i=0;i<tmpFileArray->size();i++)
-	{
-
-		tmpFileArray->at(i)->SetPath(tmpPath);
-	}
-	return tmpFileArray;
-}
-
-void CNtfsFileSystem::GetDeletedFiles(vector<FileInfo *> &fileArray, UINT32 *prmRunningFlag)
+void CNtfsFileSystem::GetDeletedFiles(vector<CBaseFileObject*> &fileArray)
 {
 	//this->FreeArray(fileArray);
 	UINT32	clusterSize = m_sectorsPerCluster * m_bytesPerSector;
@@ -186,9 +80,9 @@ void CNtfsFileSystem::GetDeletedFiles(vector<FileInfo *> &fileArray, UINT32 *prm
 	}
 	Ntfs_Data_Run	*p = m_mftRunList;
 	//遍历mft 0x80属性所有运行数据，运行数据所存数据为mft记录头。每个mft记录头1024字节
-	while (p != NULL && (*prmRunningFlag))
+	while (p != NULL)
 	{
-		for (int i = 0; i < p->length && (*prmRunningFlag); i++)
+		for (int i = 0; i < p->length; i++)
 		{
 			UINT64	clusterOffset = p->lcn*m_sectorsPerCluster + i*m_sectorsPerCluster;
 			this->ReadBuf(szBuf, clusterOffset, clusterSize);
@@ -197,7 +91,7 @@ void CNtfsFileSystem::GetDeletedFiles(vector<FileInfo *> &fileArray, UINT32 *prm
 			{
 				memcpy(szBuf + 0x1FE + j*m_bytesPerSector, szBuf + usnOffset + 2 + j * 2, 2);//恢复每个扇区最后两个字节数据
 			}
-			for (UINT32 j = 0; j < clusterSize && (*prmRunningFlag); j += 1024)
+			for (UINT32 j = 0; j < clusterSize ; j += 1024)
 			{
 				if (szBuf[j + 0x16] == 0)
 				{
@@ -217,29 +111,11 @@ void CNtfsFileSystem::GetDeletedFiles(vector<FileInfo *> &fileArray, UINT32 *prm
 					memset(szFileName, 0, sizeof(szFileName));
 					memcpy(szFileName, szAttrValue + nameLenOffset + 2, nameLen << 1);
 					::WideCharToMultiByte(CP_THREAD_ACP, 0, (LPCWSTR)szFileName, -1, szAnsiName, MAX_PATH * 2, 0, 0);
-					FileInfo *fileInfo = new FileInfo;
-					if (fileInfo == NULL)
-					{
-						break;
-					}
-					fileInfo->fileName = "";
-					fileInfo->fileSize = 0;
-					fileInfo->m_fileExtent = NULL;
-					fileInfo->fileName = szAnsiName;
-					//获取文件由哪些簇组成
-					this->GetFileExtent(&szBuf[j], clusterOffset + j / 512, &fileInfo->m_fileExtent);
-					if (fileInfo->m_fileExtent == NULL)
-					{
-						delete fileInfo;
-						continue;
-					}
-					//this->FreeFileExtent(fileInfo->m_fileExtent);
-					//delete fileInfo;
-					fileInfo->fileSize = this->GetFileSize(szBuf + j);
-					//fileInfo->accessDate = this->GetAccessDate(szBuf + j);
-					//fileInfo->createDate = this->GetCreateDate(szBuf + j);
-					//fileInfo->modifyDate = this->GetModifyDate(szBuf + j);
-					fileArray.push_back(fileInfo);
+					
+					CBaseFileObject	*fileObject = new CBaseFileObject;
+					fileObject->SetFileName(szAnsiName);
+					fileObject->SetFileSize(this->GetFileSize(szBuf));
+					fileArray.push_back(fileObject);
 				}
 			}
 		}
@@ -271,11 +147,11 @@ UINT32 CNtfsFileSystem::GetAttrValue(NTFS_ATTRDEF prmAttrTitle,UCHAR prmBuf[],UC
 		return 0;
 	}
 	UINT16 flag = *(UINT16*)&prmBuf[0x16];
-	if (flag == 0 || flag == 2)
+	/*if (flag == 0 || flag == 2)
 	{
 		//文件或目录被删除
 		return 0;
-	}
+	}*/
 	//mft记录头开始偏移20处的两个字节为mft第一个属性的偏移值
 	UINT32	attrOffset = *(UINT16*)&prmBuf[20];//第一个属性的偏移值
 

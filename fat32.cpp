@@ -52,7 +52,6 @@ void CFat32FileSystem::Init()
 	m_rootDirectory->SetFileType(FILE_OBJECT_TYPE_ROOT);
 	m_rootDirectory->SetFileSize(0);
 	m_rootDirectory->SetFileName(TEXT(""));
-	m_rootDirectory->SetPath(TEXT(""));
 	UINT64	tmpRootStartSector = m_fatSector.BPB_FATSz32 * m_fatSector.BPB_NumFATs;
 	tmpRootStartSector += m_fatSector.BPB_ResvdSecCnt;
 	tmpRootStartSector += (2-m_fatSector.BPB_RootClus)*m_fatSector.BPB_SecPerClus;
@@ -148,190 +147,7 @@ SUCCESS:
 	return tmpResult;
 }
 
-CBaseFileObject *CFat32FileSystem::GetFileObjectByPath(LPCTSTR prmFileName)
-{
-	if(_tcslen(prmFileName)>MAX_PATH*4)
-	{
-		return NULL;
-	}
-	TCHAR		tmpFullFileName[MAX_PATH*4] = {0};
-	memcpy(tmpFullFileName,prmFileName,_tcslen(prmFileName)*sizeof(TCHAR));
-	CStringUtil		tmpString(prmFileName);
-	tmpString.ReplaceStr(_T("/"),_T("\\"));
-	vector<CStringUtil>		tmpStrArray;
-	//将文件名以"\"进行分隔
-	tmpString.SplitString(tmpStrArray,_T("\\"));
-	if(tmpStrArray.size()==0)
-	{
-		return NULL;
-	}
-	TCHAR		tmpFileName[MAX_PATH] = {0};
-
-	//逻辑簇大小
-	UINT32		tmpClusterSize = m_fatSector.BPB_BytsPerSec*m_fatSector.BPB_SecPerClus;
-	UCHAR		*tmpBuf = (UCHAR*)malloc(sizeof(UCHAR)*tmpClusterSize);
-
-	DIR_ENTRY_s		*tmpDirEntry;
-	//
-	UINT32			tmpClusterNum = 2;
-	UINT32			tmpOffset = 0;
-	UINT32			i = 0;
-	for(i=0;i<tmpStrArray.size();i++)
-	{
-		while(tmpClusterNum)
-		{
-			tmpOffset = m_fatSector.BPB_FATSz32*m_fatSector.BPB_NumFATs;
-			tmpOffset += m_fatSector.BPB_ResvdSecCnt;
-			tmpOffset += (tmpClusterNum-m_fatSector.BPB_RootClus)*m_fatSector.BPB_SecPerClus;
-			//每次读取一个逻辑簇大小到缓存
-			this->ReadBuf(tmpBuf,tmpOffset,tmpClusterSize);
-			UINT32	 j = 0;
-			for(j=0;j<tmpClusterSize;j+=32)
-			{
-				tmpDirEntry = (DIR_ENTRY_s*)(tmpBuf+j);
-				if(tmpDirEntry->name[0]==0)
-				{
-					break;
-				}
-				//记录当前文件项
-				DIR_ENTRY_s	*tmpFirstEntry = tmpDirEntry;
-				//找到第一个非长文件名标识的文件项
-				while(tmpDirEntry->attr==0x0F)
-				{
-					j+=32;
-					tmpDirEntry = (DIR_ENTRY_s*)(tmpBuf+j);
-				}
-				if(tmpDirEntry->name[0]==0xE5)//不考虑删除的文件
-				{
-					continue;
-				}
-				if(tmpFirstEntry==tmpDirEntry)
-				{
-					this->ParseShortFileName(tmpDirEntry,tmpFileName,MAX_PATH);
-				}
-				else
-				{
-					this->ParseLongFileName(tmpFileName,MAX_PATH,tmpFirstEntry,tmpDirEntry);
-				}
-				if(tmpStrArray[i].CompareNoCase(tmpFileName)==0)
-				{
-					break;
-				}
-			}
-			if(j>=tmpClusterSize)
-			{
-				tmpClusterNum = this->GetNextCluster(tmpClusterNum);
-			}
-			else
-			{
-				tmpClusterNum = this->ParseStartCluster(tmpDirEntry);
-				break;
-			}
-		}
-	}
-	
-	if(i>=tmpStrArray.size())
-	{
-		CBaseFileObject	*tmpFileObject = new CBaseFileObject;
-		if(tmpDirEntry->attr & 0x10)
-		{
-			tmpFileObject->SetFileSize(0);
-			tmpFileObject->SetFileType(FILE_OBJECT_TYPE_DIRECTORY);
-		}
-		else
-		{
-			tmpFileObject->SetFileSize(tmpDirEntry->size);
-			tmpFileObject->SetFileType(FILE_OBJECT_TYPE_FILE);
-		}
-		UINT32		tmpClusterNum = this->ParseStartCluster(tmpDirEntry);
-		UINT32		tmpSectors = m_fatSector.BPB_FATSz32*m_fatSector.BPB_NumFATs;
-		tmpSectors += m_fatSector.BPB_ResvdSecCnt;
-		tmpSectors += (tmpClusterNum-m_fatSector.BPB_RootClus)*m_fatSector.BPB_SecPerClus;
-		tmpFileObject->SetFileStartSector(tmpSectors);
-		tmpFileObject->SetFileName(tmpStrArray[tmpStrArray.size()-1]);
-		::PathRemoveFileSpec(tmpFullFileName);
-		tmpFileObject->SetPath(tmpFullFileName);
-		free(tmpBuf);
-		return tmpFileObject;
-	}
-	free(tmpBuf);
-	return 0;
-}
-
-vector<CBaseFileObject*> *CFat32FileSystem::GetChildren(CBaseFileObject *prmParentDirectory)
-{
-	if(prmParentDirectory->GetFileType()==FILE_OBJECT_TYPE_FILE)
-	{
-		return NULL;
-	}
-	vector<CBaseFileObject*> *tmpArray = new vector<CBaseFileObject*>;
-	DIR_ENTRY_s		*tmpDirEntry = { 0 };
-	//int		tmpIndex = prmParentDirectory->GetFileType()==FILE_OBJECT_TYPE_ROOT?32:64;
-	UINT32	tmpClusterNum = (UINT32)prmParentDirectory->GetFileStartSector();
-	//fat32文件系统根据文件的扇区号计算文件的簇号
-	tmpClusterNum -= m_fatSector.BPB_FATSz32*m_fatSector.BPB_NumFATs;
-	tmpClusterNum -= m_fatSector.BPB_ResvdSecCnt;
-	tmpClusterNum = tmpClusterNum/m_fatSector.BPB_SecPerClus+2;
-	//每簇多少字节
-	UINT32		tmpClusterSize = m_fatSector.BPB_SecPerClus*m_fatSector.BPB_BytsPerSec;
-	//存放每簇的数据
-	char		*tmpClusterBuf = (char*)malloc(tmpClusterSize+32);
-	if(tmpClusterBuf==NULL)
-	{
-		return tmpArray;
-	}
-	memset(tmpClusterBuf,0,tmpClusterSize+32);
-	CStringUtil		tmpPath = prmParentDirectory->GetPath();
-	while(tmpClusterNum)
-	{
-		UINT32	tmpOffset = m_fatSector.BPB_FATSz32 * m_fatSector.BPB_NumFATs;
-		tmpOffset += m_fatSector.BPB_ResvdSecCnt;
-		tmpOffset += (tmpClusterNum-m_fatSector.BPB_RootClus)*m_fatSector.BPB_SecPerClus;
-		//读取一簇到内存中，然后解析所有的文件信息
-		this->ReadBuf((UCHAR*)tmpClusterBuf,tmpOffset,tmpClusterSize);
-		for(UINT32 i=0;i<tmpClusterSize;i+=32)
-		{
-			tmpDirEntry = (DIR_ENTRY_s *)(tmpClusterBuf+i);
-			if(tmpDirEntry->name[0]==0)
-			{
-				break;
-			}
-			//如果当前是卷标目录或都当前目录(.)或父目录(..)，则跳过，不做处理
-			if( (tmpDirEntry->attr&0x80) || tmpDirEntry->name[0]=='.' )
-			{
-				continue;
-			}
-			DIR_ENTRY_s	*tmpFirstEntry = tmpDirEntry;
-			//找到第一个非长文件名标识的Dir_Entry项
-			while(tmpDirEntry->attr==0xF)
-			{
-				i+=32;
-				tmpDirEntry = (DIR_ENTRY_s *)(tmpClusterBuf+i);
-			}
-			if(tmpDirEntry->name[0]==0xE5)
-			{
-				//删除文件标识，不要删除的文件
-				continue;
-			}
-			CBaseFileObject	*tmpFileObject = this->ParseFileObject(tmpFirstEntry,tmpDirEntry);
-			
-			if(prmParentDirectory->GetFileType()!=FILE_OBJECT_TYPE_ROOT)
-			{
-				tmpFileObject->SetPath(tmpPath+"\\"+prmParentDirectory->GetFileName());
-			}
-			tmpArray->push_back(tmpFileObject);
-		}
-		if(tmpDirEntry->name[0]==0)
-		{
-			break;
-		}
-		tmpClusterNum = this->GetNextCluster(tmpClusterNum);
-	}
-	free(tmpClusterBuf);
-	return tmpArray;
-}
-
-void CFat32FileSystem::GetDeletedFiles(vector<FileInfo *> &fileArray, UINT32 *prmRunningFlag)
+void CFat32FileSystem::GetDeletedFiles(vector<CBaseFileObject *> &fileArray)
 {
 	TCHAR	fileName[MAX_PATH] = { 0 };
 	//FileInfo	fileInfo;
@@ -343,12 +159,12 @@ void CFat32FileSystem::GetDeletedFiles(vector<FileInfo *> &fileArray, UINT32 *pr
 
 	UINT32	clusterSize = m_fatSector.BPB_BytsPerSec*m_fatSector.BPB_SecPerClus;
 	UCHAR	*szBuf = (UCHAR*)malloc(sizeof(UCHAR)*clusterSize);
-	while (!dirs.empty() && (*prmRunningFlag))
+	while (!dirs.empty())
 	{
 		clusNum = dirs.front();
 		dirs.pop();
 		//遍历文件夹的第个簇
-		while (*prmRunningFlag)
+		while (1)
 		{
 			offset = m_fatSector.BPB_FATSz32 * m_fatSector.BPB_NumFATs;
 			offset += m_fatSector.BPB_ResvdSecCnt;
@@ -356,7 +172,7 @@ void CFat32FileSystem::GetDeletedFiles(vector<FileInfo *> &fileArray, UINT32 *pr
 			this->ReadBuf(szBuf, offset, clusterSize);
 
 			//遍历簇中的每个文件项
-			for (UINT32 i = 0; i < clusterSize && (*prmRunningFlag); i += 32)
+			for (UINT32 i = 0; i < clusterSize ; i += 32)
 			{
 				DIR_ENTRY_s *dirEntry = (DIR_ENTRY_s*)(szBuf + i);
 				if (dirEntry->name[0] == 0)
@@ -372,7 +188,6 @@ void CFat32FileSystem::GetDeletedFiles(vector<FileInfo *> &fileArray, UINT32 *pr
 						dirs.push(tmpClusterNum);
 						m_clusterFlag[tmpClusterNum] = 1;//避免重复对同一簇进行分析
 					}
-					//dirs.push(this->ParseStartCluster(dirEntry));
 				}
 
 				//记录当前文件项
@@ -394,19 +209,11 @@ void CFat32FileSystem::GetDeletedFiles(vector<FileInfo *> &fileArray, UINT32 *pr
 					{
 						this->ParseLongFileName(fileName, MAX_PATH, firstEntry, dirEntry);
 					}
-					FileInfo *fileInfo = new FileInfo;
-					if (fileInfo == NULL)
-					{
-						break;
-					}
-					fileInfo->fileName = fileName;
-					fileInfo->fileSize = this->ParseFileSize(dirEntry);
-					fileInfo->m_fileExtent = NULL;
-					this->ParseFileExtent(dirEntry, &fileInfo->m_fileExtent);
-					this->ParseAccessDate(dirEntry, fileInfo);
-					this->ParseCreateDate(dirEntry, fileInfo);
-					this->ParseModifyDate(dirEntry, fileInfo);
-					fileArray.push_back(fileInfo);
+
+					CBaseFileObject	*fileObject = new CBaseFileObject;
+					fileObject->SetFileName(fileName);
+					fileObject->SetFileSize(this->ParseFileSize(dirEntry));
+					fileArray.push_back(fileObject);
 				}
 			}
 			clusNum = this->GetNextCluster(clusNum);
@@ -573,12 +380,8 @@ UINT32 CFat32FileSystem::ParseFileExtent(DIR_ENTRY_s *dirEntry, File_Content_Ext
 	return 1;
 }
 
-void CFat32FileSystem::ParseCreateDate(DIR_ENTRY_s *dirEntry, FileInfo *fileInfo)
+void CFat32FileSystem::ParseCreateDate(DIR_ENTRY_s *dirEntry)
 {
-	if (fileInfo == NULL)
-	{
-		return;
-	}
 	char	szBuf[128] = { 0 };
 	USHORT	time = dirEntry->ctime;
 	USHORT	date = dirEntry->cdate;
@@ -589,15 +392,11 @@ void CFat32FileSystem::ParseCreateDate(DIR_ENTRY_s *dirEntry, FileInfo *fileInfo
 	UINT8   month = (date & 0x1E0) >> 5;
 	UINT8	day = (date & 0x1F);
 	sprintf_s(szBuf, 128, _T("%04d-%02d-%02d %02d:%02d:%02d"), year + 1980, month, day, hour, minute, second);
-	fileInfo->createDate = szBuf;
+	//fileInfo->createDate = szBuf;
 }
 
-void CFat32FileSystem::ParseModifyDate(DIR_ENTRY_s *dirEntry, FileInfo *fileInfo)
+void CFat32FileSystem::ParseModifyDate(DIR_ENTRY_s *dirEntry)
 {
-	if (fileInfo == NULL)
-	{
-		return;
-	}
 	char	szBuf[128] = { 0 };
 	USHORT	time = dirEntry->time;
 	USHORT	date = dirEntry->date;
@@ -608,20 +407,16 @@ void CFat32FileSystem::ParseModifyDate(DIR_ENTRY_s *dirEntry, FileInfo *fileInfo
 	UINT8   month = (date & 0x1E0) >> 5;
 	UINT8	day = (date & 0x1F);
 	sprintf_s(szBuf, 128, _T("%04d-%02d-%02d %02d:%02d:%02d"), year + 1980, month, day, hour, minute, second);
-	fileInfo->modifyDate = szBuf;
+	//fileInfo->modifyDate = szBuf;
 }
 
-void CFat32FileSystem::ParseAccessDate(DIR_ENTRY_s *dirEntry, FileInfo *fileInfo)
+void CFat32FileSystem::ParseAccessDate(DIR_ENTRY_s *dirEntry)
 {
-	if (fileInfo == NULL)
-	{
-		return;
-	}
 	char	szBuf[128] = { 0 };
 	USHORT	date = dirEntry->adate;
 	UINT8	year = (date & 0xFE00) >> 9;
 	UINT8   month = (date & 0x1E0) >> 5;
 	UINT8	day = (date & 0x1F);
 	sprintf_s(szBuf, 128, _T("%04d-%02d-%02d"), year + 1980, month, day);
-	fileInfo->modifyDate = szBuf;
+	//fileInfo->modifyDate = szBuf;
 }

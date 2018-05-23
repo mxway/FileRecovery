@@ -9,6 +9,7 @@ CBaseFileSystem::CBaseFileSystem(IBaseReader *prmReader)
 
 CBaseFileSystem::~CBaseFileSystem()
 {
+	delete m_reader;
 	if(m_rootDirectory)
 	{
 		m_rootDirectory->Destroy();
