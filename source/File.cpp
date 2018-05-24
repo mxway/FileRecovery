@@ -9,7 +9,14 @@ CBaseFileObject::CBaseFileObject()
 
 CBaseFileObject::~CBaseFileObject()
 {
-
+	File_Content_Extent_s	*p = m_fileExtent;
+	File_Content_Extent_s	*q = p;
+	while (p != NULL)
+	{
+		p = p->next;
+		delete q;
+		q = p;
+	}
 }
 
 void	CBaseFileObject::SetFileName(const CStringUtil &prmFileName)

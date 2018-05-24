@@ -44,20 +44,8 @@ void CNtfsFileSystem::Init()
 
 UINT64	CNtfsFileSystem::ReadFileContent(CBaseFileObject *prmFileObject, UCHAR prmDstBuf[], UINT64 prmByteOff, UINT64 prmByteToRead)
 {
-	UCHAR	tmpBuf[1024] = {0};
-	this->ReadBuf(tmpBuf,prmFileObject->GetFileStartSector(),1024);
-	UINT16	usnOffset = *(UINT16*)&tmpBuf[4];//更新序列号的偏移值
-	memcpy(tmpBuf + 0x1FE, tmpBuf + usnOffset + 2, 2);//恢复第一个扇区最后两字节真实数据
-	memcpy(tmpBuf + 0x3FE, tmpBuf + usnOffset + 4, 2);//恢复第二个扇区最后两字节真实数据
-	File_Content_Extent_s		*tmpFileExtent = NULL;
-	this->GetFileExtent(tmpBuf,prmFileObject->GetFileStartSector(),&tmpFileExtent);
-	if(tmpFileExtent==NULL)
-	{
-		return 0;
-	}
 	UINT64		tmpResult = this->ReadFileContent(prmDstBuf,prmByteOff,prmByteToRead,
-		prmFileObject->GetFileSize(),tmpFileExtent);
-	this->FreeFileExtent(tmpFileExtent);
+		prmFileObject->GetFileSize(), prmFileObject->GetFileExtent());
 	return tmpResult;
 }
 
@@ -112,9 +100,19 @@ void CNtfsFileSystem::GetDeletedFiles(vector<CBaseFileObject*> &fileArray)
 					memcpy(szFileName, szAttrValue + nameLenOffset + 2, nameLen << 1);
 					::WideCharToMultiByte(CP_THREAD_ACP, 0, (LPCWSTR)szFileName, -1, szAnsiName, MAX_PATH * 2, 0, 0);
 					
+					//用于设置文件内容占用了哪些扇区信息
+					File_Content_Extent_s	*fileExtents = NULL;
+
+					this->GetFileExtent(szBuf + j, clusterOffset + j / 512, &fileExtents);
+
 					CBaseFileObject	*fileObject = new CBaseFileObject;
 					fileObject->SetFileName(szAnsiName);
-					fileObject->SetFileSize(this->GetFileSize(szBuf));
+					fileObject->SetFileSize(this->GetFileSize(szBuf+j));
+					//设置文件内容占用扇区信息
+					fileObject->SetFileExtent(fileExtents);
+					fileObject->SetAccessTime(this->GetAccessTime(szBuf+j));
+					fileObject->SetCreateTime(this->GetCreateTime(szBuf+j));
+					fileObject->SetModifyTime(this->GetModifyTime(szBuf+j));
 					fileArray.push_back(fileObject);
 				}
 			}
@@ -957,6 +955,60 @@ UINT64	CNtfsFileSystem::GetFileSize(UCHAR *prmMFTRecord)
 		return tmpResult;
 	}
 	return 0;
+}
+
+CStringUtil	CNtfsFileSystem::GetAccessTime(UCHAR szBuf[])
+{
+	UCHAR	szAttrValue[1024] = { 0 };
+	if (this->GetAttrValue(ATTR_STANDARD, szBuf, szAttrValue))
+	{
+		UINT64 accessTime = *(UINT64*)(szAttrValue + 0x30);
+		return this->FileTimeToString(accessTime);
+	}
+	return "";
+}
+
+CStringUtil CNtfsFileSystem::GetModifyTime(UCHAR szBuf[])
+{
+	UCHAR	szAttrValue[1024] = { 0 };
+	if (this->GetAttrValue(ATTR_STANDARD, szBuf, szAttrValue))
+	{
+		UINT64 modifyTime = *(UINT64*)(szAttrValue + 0x20);
+		return this->FileTimeToString(modifyTime);
+	}
+	return "";
+}
+
+CStringUtil CNtfsFileSystem::GetCreateTime(UCHAR szBuf[])
+{
+	UCHAR	szAttrValue[1024] = { 0 };
+	if (this->GetAttrValue(ATTR_STANDARD, szBuf, szAttrValue))
+	{
+		//UINT16 offset = *(UINT16*)(szAttrValue + 0x0A);
+		UINT64 createTime = *(UINT64*)(szAttrValue + 0x18);
+		return this->FileTimeToString(createTime);
+	}
+	return "";
+}
+
+CStringUtil	CNtfsFileSystem::FileTimeToString(UINT64 prmFileTime)
+{
+	TCHAR	szBuf[128] = { 0 };
+	FILETIME fileTime;
+	SYSTEMTIME	systemTime;
+	TIME_ZONE_INFORMATION tz;
+	fileTime.dwLowDateTime = prmFileTime & 0xFFFFFFFF;
+	fileTime.dwHighDateTime = (prmFileTime & 0xFFFFFFFF00000000) >> 32;
+	::FileTimeToSystemTime(&fileTime, &systemTime);
+	::GetTimeZoneInformation(&tz);
+	long lTime = systemTime.wHour * 60 + systemTime.wMinute;
+	lTime -= tz.Bias;
+	systemTime.wHour = (WORD)lTime / 60;
+	systemTime.wMinute = lTime % 60;
+
+	sprintf_s(szBuf, 128, _T("%4d-%02d-%02d %02d:%02d:%02d"), systemTime.wYear, systemTime.wMonth, systemTime.wDay,
+		systemTime.wHour, systemTime.wMinute, systemTime.wSecond);
+	return szBuf;
 }
 
 FILE_OBJECT_TYPE CNtfsFileSystem::GetFileType(UCHAR *prmMFTRecord)

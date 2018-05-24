@@ -60,21 +60,21 @@ void CFat32FileSystem::Init()
 
 UINT64	CFat32FileSystem::ReadFileContent(CBaseFileObject *prmFileObject, UCHAR prmDstBuf[], UINT64 prmByteOff, UINT64 prmByteToRead)
 {
-	if(prmFileObject->GetFileType()!=FILE_OBJECT_TYPE_FILE)
+	if (prmFileObject->GetFileType() != FILE_OBJECT_TYPE_FILE)
 	{
 		return 0;
 	}
 	UINT64		tmpFileSize = prmFileObject->GetFileSize();
-	if(tmpFileSize>=0xFFFFFFFF)
+	if (tmpFileSize >= 0xFFFFFFFF)
 	{
 		return 0;
 	}
-	if(prmByteOff>=tmpFileSize)
+	if (prmByteOff >= tmpFileSize)
 	{
 		return 0;
 	}
-	UINT32		tmpRemainSize = (UINT32)tmpFileSize-(UINT32)prmByteOff;
-	if(tmpRemainSize<prmByteToRead)
+	UINT32		tmpRemainSize = (UINT32)tmpFileSize - (UINT32)prmByteOff;
+	if (tmpRemainSize<prmByteToRead)
 	{
 		prmByteToRead = tmpRemainSize;
 	}
@@ -83,63 +83,63 @@ UINT64	CFat32FileSystem::ReadFileContent(CBaseFileObject *prmFileObject, UCHAR p
 	//根据分区的扇区号计算簇号
 	tmpClusterNum -= m_fatSector.BPB_FATSz32*m_fatSector.BPB_NumFATs;
 	tmpClusterNum -= m_fatSector.BPB_ResvdSecCnt;
-	tmpClusterNum = tmpClusterNum/m_fatSector.BPB_SecPerClus+2;
+	tmpClusterNum = tmpClusterNum / m_fatSector.BPB_SecPerClus + 2;
 
-	while(prmByteOff>=tmpClusterSize && tmpClusterNum)
+	while (prmByteOff >= tmpClusterSize && tmpClusterNum)
 	{
 		prmByteOff -= tmpClusterSize;
 		tmpClusterNum = this->GetNextCluster(tmpClusterNum);
 	}
-	if(tmpClusterNum==0)
+	if (tmpClusterNum == 0)
 	{
 		//非法请求
 		return 0;
 	}
 	char	*tmpBuf = (char*)malloc(tmpClusterSize);
-	if(tmpBuf==NULL)
+	if (tmpBuf == NULL)
 	{
 		return 0;
 	}
 	UINT32 tmpOffset = m_fatSector.BPB_FATSz32*m_fatSector.BPB_NumFATs;
 	tmpOffset += m_fatSector.BPB_ResvdSecCnt;
-	tmpOffset += (tmpClusterNum-m_fatSector.BPB_RootClus)*m_fatSector.BPB_SecPerClus;
+	tmpOffset += (tmpClusterNum - m_fatSector.BPB_RootClus)*m_fatSector.BPB_SecPerClus;
 	//读取prmByteOff所有fat32分区中的簇数据
-	UINT64 tmpRet = this->ReadBuf((UCHAR*)tmpBuf,tmpOffset,tmpClusterSize);
+	UINT64 tmpRet = this->ReadBuf((UCHAR*)tmpBuf, tmpOffset, tmpClusterSize);
 	UINT64		tmpResult = 0;
-	if(prmByteToRead<=tmpClusterSize-prmByteOff)
+	if (prmByteToRead <= tmpClusterSize - prmByteOff)
 	{
 		//读取的数据小于一簇大小
-		memcpy(prmDstBuf,tmpBuf+(UINT32)prmByteOff,(UINT32)prmByteToRead);
+		memcpy(prmDstBuf, tmpBuf + (UINT32)prmByteOff, (UINT32)prmByteToRead);
 		tmpResult = prmByteToRead;
 		goto SUCCESS;
 	}
 	else
 	{
 		//将一簇中有用数据放入缓冲区
-		memcpy(prmDstBuf,tmpBuf+(UINT32)prmByteOff,tmpClusterSize-(UINT32)prmByteOff);
-		tmpResult = tmpClusterSize-prmByteOff;
+		memcpy(prmDstBuf, tmpBuf + (UINT32)prmByteOff, tmpClusterSize - (UINT32)prmByteOff);
+		tmpResult = tmpClusterSize - prmByteOff;
 		tmpClusterNum = this->GetNextCluster(tmpClusterNum);
 		//减少待读取数据大小
 		prmByteToRead = prmByteToRead - tmpResult;
 	}
 	//剩下的数据整簇读取
-	for(int i=0;i<prmByteToRead/tmpClusterSize;i++)
+	for (int i = 0; i<prmByteToRead / tmpClusterSize; i++)
 	{
 		tmpOffset = m_fatSector.BPB_FATSz32*m_fatSector.BPB_NumFATs;
 		tmpOffset += m_fatSector.BPB_ResvdSecCnt;
-		tmpOffset += (tmpClusterNum-m_fatSector.BPB_RootClus)*m_fatSector.BPB_SecPerClus;
-		this->ReadBuf(prmDstBuf+tmpResult,tmpOffset,tmpClusterSize);
+		tmpOffset += (tmpClusterNum - m_fatSector.BPB_RootClus)*m_fatSector.BPB_SecPerClus;
+		this->ReadBuf(prmDstBuf + tmpResult, tmpOffset, tmpClusterSize);
 		tmpResult += tmpClusterSize;
 		prmByteToRead = prmByteToRead - tmpClusterSize;
 		tmpClusterNum = this->GetNextCluster(tmpClusterNum);
 	}
 	//考虑可能还有数据需要读取，但不够一簇大小
-	if(prmByteToRead>0)
+	if (prmByteToRead>0)
 	{
 		tmpOffset = m_fatSector.BPB_FATSz32*m_fatSector.BPB_NumFATs;
 		tmpOffset += m_fatSector.BPB_ResvdSecCnt;
-		tmpOffset += (tmpClusterNum-m_fatSector.BPB_RootClus)*m_fatSector.BPB_SecPerClus;
-		this->ReadBuf(prmDstBuf+tmpResult,tmpOffset,prmByteToRead);
+		tmpOffset += (tmpClusterNum - m_fatSector.BPB_RootClus)*m_fatSector.BPB_SecPerClus;
+		this->ReadBuf(prmDstBuf + tmpResult, tmpOffset, prmByteToRead);
 		tmpResult += prmByteToRead;
 	}
 SUCCESS:
@@ -211,8 +211,14 @@ void CFat32FileSystem::GetDeletedFiles(vector<CBaseFileObject *> &fileArray)
 					}
 
 					CBaseFileObject	*fileObject = new CBaseFileObject;
+					File_Content_Extent_s	*fileExtent = NULL;
+					this->GetFileExtent(dirEntry, &fileExtent);
 					fileObject->SetFileName(fileName);
 					fileObject->SetFileSize(this->ParseFileSize(dirEntry));
+					fileObject->SetAccessTime(this->ParseAccessDate(dirEntry));
+					fileObject->SetCreateTime(this->ParseCreateDate(dirEntry));
+					fileObject->SetModifyTime(this->ParseModifyDate(dirEntry));
+					fileObject->SetFileExtent(fileExtent);
 					fileArray.push_back(fileObject);
 				}
 			}
@@ -356,7 +362,7 @@ CBaseFileObject *CFat32FileSystem::ParseFileObject(DIR_ENTRY_s *prmFirstEntry,DI
 	return tmpFileObject;
 }
 
-UINT32 CFat32FileSystem::ParseFileExtent(DIR_ENTRY_s *dirEntry, File_Content_Extent_s **prmExtent)
+UINT32 CFat32FileSystem::GetFileExtent(DIR_ENTRY_s *dirEntry, File_Content_Extent_s **prmExtent)
 {
 	File_Content_Extent_s *p = *prmExtent;
 	UINT32	baseSector = m_fatSector.BPB_NumFATs*m_fatSector.BPB_FATSz32 + m_fatSector.BPB_ResvdSecCnt;
@@ -380,7 +386,7 @@ UINT32 CFat32FileSystem::ParseFileExtent(DIR_ENTRY_s *dirEntry, File_Content_Ext
 	return 1;
 }
 
-void CFat32FileSystem::ParseCreateDate(DIR_ENTRY_s *dirEntry)
+CStringUtil CFat32FileSystem::ParseCreateDate(DIR_ENTRY_s *dirEntry)
 {
 	char	szBuf[128] = { 0 };
 	USHORT	time = dirEntry->ctime;
@@ -392,10 +398,11 @@ void CFat32FileSystem::ParseCreateDate(DIR_ENTRY_s *dirEntry)
 	UINT8   month = (date & 0x1E0) >> 5;
 	UINT8	day = (date & 0x1F);
 	sprintf_s(szBuf, 128, _T("%04d-%02d-%02d %02d:%02d:%02d"), year + 1980, month, day, hour, minute, second);
+	return szBuf;
 	//fileInfo->createDate = szBuf;
 }
 
-void CFat32FileSystem::ParseModifyDate(DIR_ENTRY_s *dirEntry)
+CStringUtil CFat32FileSystem::ParseModifyDate(DIR_ENTRY_s *dirEntry)
 {
 	char	szBuf[128] = { 0 };
 	USHORT	time = dirEntry->time;
@@ -407,10 +414,11 @@ void CFat32FileSystem::ParseModifyDate(DIR_ENTRY_s *dirEntry)
 	UINT8   month = (date & 0x1E0) >> 5;
 	UINT8	day = (date & 0x1F);
 	sprintf_s(szBuf, 128, _T("%04d-%02d-%02d %02d:%02d:%02d"), year + 1980, month, day, hour, minute, second);
+	return szBuf;
 	//fileInfo->modifyDate = szBuf;
 }
 
-void CFat32FileSystem::ParseAccessDate(DIR_ENTRY_s *dirEntry)
+CStringUtil CFat32FileSystem::ParseAccessDate(DIR_ENTRY_s *dirEntry)
 {
 	char	szBuf[128] = { 0 };
 	USHORT	date = dirEntry->adate;
@@ -418,5 +426,6 @@ void CFat32FileSystem::ParseAccessDate(DIR_ENTRY_s *dirEntry)
 	UINT8   month = (date & 0x1E0) >> 5;
 	UINT8	day = (date & 0x1F);
 	sprintf_s(szBuf, 128, _T("%04d-%02d-%02d"), year + 1980, month, day);
+	return szBuf;
 	//fileInfo->modifyDate = szBuf;
 }

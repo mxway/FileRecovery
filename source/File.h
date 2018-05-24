@@ -10,6 +10,7 @@
 #define FILE_MXL_INCLUDE_H
 
 #include "StringUtil.h"
+#include "commutil.h"
 
 using namespace commutil;
 
@@ -32,6 +33,8 @@ public:
 	*
 	**************************************/
 	CBaseFileObject();
+
+
 
 	/*************************************
 	*
@@ -110,12 +113,32 @@ public:
 	**************************************/
 	UINT64		GetFileSize();
 
+	void		SetAccessTime(const CStringUtil &accessTime){ m_accessTime = accessTime; }
+
+	CStringUtil	&GetAccessTime(){ return m_accessTime; }
+
+	void		SetModifyTime(const CStringUtil &modifyTime){ m_modifyTime = modifyTime; }
+
+	CStringUtil	&GetModifyTime(){ return m_modifyTime; }
+
+	void		SetCreateTime(const CStringUtil &createTime){ m_createTime = createTime; }
+
+	CStringUtil &GetCreateTime(){ return m_createTime; }
+
+	void		SetFileExtent(File_Content_Extent_s *fileExtent){ m_fileExtent = fileExtent; }
+
+	File_Content_Extent_s *GetFileExtent(){ return m_fileExtent; }
+
 	void		Destroy();
 private:
 	CStringUtil		m_fileName;//文件名称，文件绝对路径 = m_path+m_fileName
+	CStringUtil		m_accessTime;//最后访问时间
+	CStringUtil		m_modifyTime;//修改时间
+	CStringUtil		m_createTime;//创建时间
 	UINT64			m_startSector;//文件在分区中的起始扇区
 	UINT64			m_fileSize;//文件大小
 	FILE_OBJECT_TYPE	m_objectType;//文件类型：文件，目录，根目录
+	File_Content_Extent_s	*m_fileExtent;//文件内容占用了哪些扇区信息
 private:
 
 	/*************************************

@@ -286,6 +286,14 @@ private:
 	**************************************/
 	UINT64	GetFileSize(UCHAR *prmMFTRecord);
 
+	CStringUtil	GetAccessTime(UCHAR szBuf[]);
+
+	CStringUtil GetCreateTime(UCHAR szBuf[]);
+
+	CStringUtil GetModifyTime(UCHAR szBuf[]);
+
+	CStringUtil FileTimeToString(UINT64 prmFileTime);
+
 	/*************************************
 	*
 	*	º¯ÊýÃû£º	GetFileType

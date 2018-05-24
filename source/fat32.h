@@ -72,13 +72,13 @@ private:
 	UINT32	ParseFileSize(DIR_ENTRY_s *dirEntry) { return dirEntry->size; }
 
 	//
-	UINT32	ParseFileExtent(DIR_ENTRY_s *dirEntry, File_Content_Extent_s **prmExtent);
+	UINT32	GetFileExtent(DIR_ENTRY_s *dirEntry, File_Content_Extent_s **prmExtent);
 
-	void  ParseCreateDate(DIR_ENTRY_s *dirEntry);
+	CStringUtil  ParseCreateDate(DIR_ENTRY_s *dirEntry);
 
-	void ParseModifyDate(DIR_ENTRY_s *dirEntry);
+	CStringUtil ParseModifyDate(DIR_ENTRY_s *dirEntry);
 
-	void ParseAccessDate(DIR_ENTRY_s *dirEntry);
+	CStringUtil ParseAccessDate(DIR_ENTRY_s *dirEntry);
 private:
 	FAT32_s m_fatSector;
 	UINT32	*m_fatTable;

@@ -31,6 +31,8 @@ UINT64	CSectorReader::ReadSector(UINT64 prmStartSector, UINT64 prmBytesToRead, U
 	tmpInt.QuadPart = prmStartSector * 512;
 	::SetFilePointerEx(m_diskHandle, tmpInt, NULL, FILE_BEGIN);
 	DWORD	tmpBytesRead = 0;
+	int tmpErro = ::GetLastError();
 	::ReadFile(m_diskHandle, prmBuf, (DWORD)prmBytesToRead, &tmpBytesRead, NULL);
+	tmpErro = ::GetLastError();
 	return tmpBytesRead;
 }
