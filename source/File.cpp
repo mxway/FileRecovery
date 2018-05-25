@@ -4,7 +4,7 @@
 
 CBaseFileObject::CBaseFileObject()
 {
-
+	m_fileExtent = NULL;
 }
 
 CBaseFileObject::~CBaseFileObject()

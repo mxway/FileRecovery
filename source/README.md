@@ -1,2 +1,0 @@
-# FileRecovery
-windows系统下fat32及ntfs删除文件恢复

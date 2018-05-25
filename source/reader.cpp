@@ -8,6 +8,14 @@ CSectorReader::CSectorReader()
 	m_diskHandle = INVALID_HANDLE_VALUE;
 }
 
+CSectorReader::~CSectorReader()
+{
+	if(m_diskHandle != INVALID_HANDLE_VALUE)
+	{
+		::CloseHandle(m_diskHandle);
+	}
+}
+
 bool	CSectorReader::OpenDevice(const TCHAR *prmDevice)
 {
 	CStringUtil tmpStr;

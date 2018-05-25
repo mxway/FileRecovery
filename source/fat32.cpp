@@ -46,16 +46,6 @@ void CFat32FileSystem::Init()
 	this->ReadBuf((UCHAR*)m_fatTable, m_fatSector.BPB_ResvdSecCnt, sizeof(UINT32)*m_fatNum);
 	m_bytesPerSector = m_fatSector.BPB_BytsPerSec;
 	m_sectorsPerCluster = m_fatSector.BPB_SecPerClus;
-
-	//读取fat32根目录信息
-	m_rootDirectory = new CBaseFileObject;
-	m_rootDirectory->SetFileType(FILE_OBJECT_TYPE_ROOT);
-	m_rootDirectory->SetFileSize(0);
-	m_rootDirectory->SetFileName(TEXT(""));
-	UINT64	tmpRootStartSector = m_fatSector.BPB_FATSz32 * m_fatSector.BPB_NumFATs;
-	tmpRootStartSector += m_fatSector.BPB_ResvdSecCnt;
-	tmpRootStartSector += (2-m_fatSector.BPB_RootClus)*m_fatSector.BPB_SecPerClus;
-	m_rootDirectory->SetFileStartSector(tmpRootStartSector);
 }
 
 UINT64	CFat32FileSystem::ReadFileContent(CBaseFileObject *prmFileObject, UCHAR prmDstBuf[], UINT64 prmByteOff, UINT64 prmByteToRead)

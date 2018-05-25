@@ -29,17 +29,6 @@ void CNtfsFileSystem::Init()
 	m_clustersPerIndex = *((UINT32*)&szBuf[0x44]);
 	//获取$MFT文件0x80数据运行流
 	this->GetMFTRunList();
-
-	//获取ntfs分区根目录信息
-	m_rootDirectory = new CBaseFileObject;
-	if(m_rootDirectory==NULL)
-	{
-		return;
-	}
-	m_rootDirectory->SetFileStartSector(m_mftStartCluster * m_sectorsPerCluster + 10);
-	m_rootDirectory->SetFileName(TEXT(""));
-	m_rootDirectory->SetFileSize(0);
-	m_rootDirectory->SetFileType(FILE_OBJECT_TYPE_ROOT);
 }
 
 UINT64	CNtfsFileSystem::ReadFileContent(CBaseFileObject *prmFileObject, UCHAR prmDstBuf[], UINT64 prmByteOff, UINT64 prmByteToRead)

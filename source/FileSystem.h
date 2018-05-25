@@ -127,21 +127,11 @@ public:
 	**************************************/
 	void		SetTotalSector(UINT64 prmTotalSector){m_totalSector = prmTotalSector;}
 
-	/*************************************
-	*
-	*	函数名：	GetRootDirectory
-	*	函数说明：	获取分区的根目录
-	*	返回值：	CBaseFileObject	*
-	*
-	**************************************/
-	CBaseFileObject	*GetRootDirectory(){return m_rootDirectory;}
-
 protected:
 	UINT16		m_bytesPerSector;//每扇区字节数
 	UINT8		m_sectorsPerCluster;//每簇扇区数
 	UINT64		m_startSector;//该分区在磁盘中的起始扇区
 	UINT64		m_totalSector;//该分区总共占用的扇区数
-	CBaseFileObject	*m_rootDirectory;
 	IBaseReader	*m_reader;//读取分区数据的对象
 };
 

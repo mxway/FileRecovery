@@ -45,6 +45,8 @@ class CSectorReader:public IBaseReader
 {
 public:
 	CSectorReader();
+
+	~CSectorReader();
 	/*************************************
 	*
 	*	º¯ÊýÃû£º	OpenDevice

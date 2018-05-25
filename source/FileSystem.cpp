@@ -2,7 +2,7 @@
 #include "commutil.h"
 
 CBaseFileSystem::CBaseFileSystem(IBaseReader *prmReader)
-	:m_reader(prmReader),m_rootDirectory(NULL)
+	:m_reader(prmReader)
 {
 
 }
@@ -10,10 +10,6 @@ CBaseFileSystem::CBaseFileSystem(IBaseReader *prmReader)
 CBaseFileSystem::~CBaseFileSystem()
 {
 	delete m_reader;
-	if(m_rootDirectory)
-	{
-		m_rootDirectory->Destroy();
-	}
 }
 
 UINT64	CBaseFileSystem::ReadBuf(UCHAR prmBuf[],UINT64 prmStartSector,UINT64 prmByteToRead)
