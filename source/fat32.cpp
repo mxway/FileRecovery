@@ -50,12 +50,44 @@ void CFat32FileSystem::Init()
 
 UINT64	CFat32FileSystem::ReadFileContent(CBaseFileObject *prmFileObject, UCHAR prmDstBuf[], UINT64 prmByteOff, UINT64 prmByteToRead)
 {
+	UCHAR		tmpBuf[512] = { 0 };
+	UINT64		tmpResult = 0;
 	if (prmFileObject->GetFileType() != FILE_OBJECT_TYPE_FILE)
 	{
 		return 0;
 	}
 	UINT64		tmpFileSize = prmFileObject->GetFileSize();
-	if (tmpFileSize >= 0xFFFFFFFF)
+	File_Content_Extent_s	*tmpFileExtent = prmFileObject->GetFileExtent();
+	//请求读取的文件偏移大于文件内容。
+	if (prmByteOff > tmpFileSize)
+	{
+		prmByteOff = tmpFileSize;
+	}
+	//请求读取的字节数大于从prmByteoff到文件结束剩余字节数
+	if (prmByteToRead > tmpFileSize - prmByteOff)
+	{
+		prmByteToRead = tmpFileSize - prmByteOff;
+	}
+	UINT64	tmpFileOffset = tmpFileExtent->startSector * 512 + prmByteOff;
+	//当请求的偏移值不是512的倍数时，先读取不满512字节数据，后面再读取
+	if (tmpFileOffset % 512 != 0)
+	{
+		UINT32	tmpAlignSize = tmpFileOffset % 512;
+		this->ReadBuf(tmpBuf, tmpFileOffset / 512, 512);
+		//需要读取512-tmpAlignSize
+		tmpResult = 512 - tmpAlignSize;
+		memcpy(prmDstBuf, tmpBuf+tmpAlignSize, 512 - tmpAlignSize);
+		tmpFileOffset = tmpFileOffset + 512;
+		
+		if (prmByteToRead <= tmpResult)
+		{
+			return prmByteToRead;
+		}
+		prmByteToRead -= tmpResult;
+	}
+	tmpResult += this->ReadBuf(prmDstBuf + tmpResult, tmpFileOffset / 512, prmByteToRead);
+	return tmpResult;
+	/*if (tmpFileSize >= 0xFFFFFFFF)
 	{
 		return 0;
 	}
@@ -134,7 +166,7 @@ UINT64	CFat32FileSystem::ReadFileContent(CBaseFileObject *prmFileObject, UCHAR p
 	}
 SUCCESS:
 	free(tmpBuf);
-	return tmpResult;
+	return tmpResult;*/
 }
 
 void CFat32FileSystem::GetDeletedFiles(vector<CBaseFileObject *> &fileArray)

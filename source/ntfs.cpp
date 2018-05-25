@@ -640,14 +640,21 @@ UINT64	CNtfsFileSystem::ReadFileContent(UCHAR prmDstBuf[],UINT64 prmByteOff,UINT
 		goto END;
 	}
 
-	//处理文件偏移不是512整数倍的情况
-	//UINT32	tmpOffset = prmByteOff&(~511);
-	//先读取整数
-	this->ReadBuf(tmpBuf,p->startSector+prmByteOff/512,512);
-	//要读取的偏移为prmByteOff%512，读取的字节数为512-prmByte%512
-	memcpy(prmDstBuf,tmpBuf+(prmByteOff&(511)),512-(prmByteOff&511));
-	tmpResult = 512-(prmByteOff&511);
-	prmByteOff +=tmpResult;
+	if (prmByteOff % 512 != 0)
+	{
+		UINT32	tmpAlignSize = prmByteOff % 512;
+		this->ReadBuf(tmpBuf, p->startSector + prmByteOff / 512, 512);
+		tmpResult = 512 - tmpAlignSize;
+		memcpy(prmDstBuf, tmpBuf + tmpAlignSize, 512 - tmpAlignSize);
+		prmByteOff = prmByteOff + tmpResult;
+
+		if (prmByteToRead <= tmpResult)
+		{
+			return prmByteToRead;
+		}
+		prmByteToRead -= tmpResult;
+
+	}
 	if(p->startSector + prmByteOff/512 == p->totalSector)
 	{
 		p = p->next;
