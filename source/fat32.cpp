@@ -76,7 +76,8 @@ UINT64	CFat32FileSystem::ReadFileContent(CBaseFileObject *prmFileObject, UCHAR p
 		this->ReadBuf(tmpBuf, tmpFileOffset / 512, 512);
 		//ÐèÒª¶ÁÈ¡512-tmpAlignSize
 		tmpResult = 512 - tmpAlignSize;
-		memcpy(prmDstBuf, tmpBuf+tmpAlignSize, 512 - tmpAlignSize);
+		int	tmpCopyBytes = prmByteToRead > 512 - tmpAlignSize ? 512 - tmpAlignSize : prmByteToRead;
+		memcpy(prmDstBuf, tmpBuf + tmpAlignSize, tmpCopyBytes);
 		tmpFileOffset = tmpFileOffset + 512;
 		
 		if (prmByteToRead <= tmpResult)
