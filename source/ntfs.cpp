@@ -600,25 +600,21 @@ UINT64	CNtfsFileSystem::ReadFileContent(UCHAR prmDstBuf[],UINT64 prmByteOff,UINT
 	UINT64		tmpResult = 0;
 	UCHAR		tmpBuf[512] = {0};
 	UINT64		tmpByteRead = 0;
-	if(prmFileExtent==NULL)
+	if (prmByteOff >= prmFileSize)
 	{
 		return 0;
 	}
-	if(prmByteOff>prmFileSize)
+	if(prmByteOff+prmByteToRead > prmFileSize)
 	{
-		return 0;
+		prmByteToRead = prmFileSize - prmByteOff;
 	}
-	if(prmByteOff+prmByteToRead>prmFileSize)
-	{
-		prmByteToRead = prmFileSize-prmByteOff;
-	}
-	File_Content_Extent_s *p = prmFileExtent;
-
-	if (p->isPersist)
+	
+	//文件内容是常驻属性，直接读取MFT记录返回文件内容
+	if(prmFileExtent->isPersist)
 	{
 		UCHAR	szBuf[1024] = { 0 };
 		UCHAR	szAttr[1024] = { 0 };
-		this->ReadBuf(szBuf, p->startSector, 1024);
+		this->ReadBuf(szBuf, prmFileExtent->startSector, 1024);
 		UINT16	usnOffset = *(UINT16*)&szBuf[4];//更新序列号的偏移值
 		memcpy(szBuf + 0x1FE, szBuf + usnOffset + 2, 2);//恢复第一个扇区最后两字节真实数据
 		memcpy(szBuf + 0x3FE, szBuf + usnOffset + 4, 2);//恢复第二个扇区最后两字节真实数据
@@ -627,40 +623,82 @@ UINT64	CNtfsFileSystem::ReadFileContent(UCHAR prmDstBuf[],UINT64 prmByteOff,UINT
 			memcpy(prmDstBuf, szAttr + 0x18 + (UINT32)prmByteOff, (UINT32)prmByteToRead);
 			return (UINT32)prmByteToRead;
 		}
+		return 0;
 	}
 
-	while (p && prmByteOff >= p->totalSector*m_bytesPerSector)
-	{//找到off应该在哪个run list中
+	File_Content_Extent_s *p = prmFileExtent;
+	//prmByteOff所在扇区信息
+	while(p && prmByteOff >= p->totalSector*m_bytesPerSector)
+	{
 		prmByteOff -= p->totalSector*m_bytesPerSector;
 		p = p->next;
 	}
-	//偏移值已经超出了文件大小，不能读
-	if (p == NULL)
+
+	if(p==NULL)
 	{
-		goto END;
+		return 0;
 	}
 
-	if (prmByteOff % 512 != 0)
+	//处理文件偏移不是512整数倍的情况
+	if(prmByteOff %512 != 0)
 	{
-		UINT32	tmpAlignSize = prmByteOff % 512;
-		this->ReadBuf(tmpBuf, p->startSector + prmByteOff / 512, 512);
-		tmpResult = 512 - tmpAlignSize;
-		memcpy(prmDstBuf, tmpBuf + tmpAlignSize, 512 - tmpAlignSize);
-		prmByteOff = prmByteOff + tmpResult;
-
-		if (prmByteToRead <= tmpResult)
+		tmpByteRead = 512 - prmByteOff%512;
+		if (prmByteToRead <= tmpByteRead)
 		{
-			return prmByteToRead;
+			tmpByteRead = prmByteToRead;
 		}
-		prmByteToRead -= tmpResult;
-
+		//prmByteOff向下取512倍数，读取的512字节从[prmByteOff%512,512)缓冲区即要读数据
+		this->ReadBuf(tmpBuf,p->startSector + prmByteOff/512,512);
+		memcpy(prmDstBuf,tmpBuf+prmByteOff%512,(UINT32)tmpByteRead);
+		tmpResult = tmpByteRead;
+		if (tmpByteRead == prmByteToRead)
+		{
+			return tmpResult;
+		}
+		//偏移调整至512倍数。
+		prmByteOff += tmpByteRead;
+		//调整后的偏移超出当前块的范围，需要找下一块内容
+		if(prmByteOff >= p->totalSector*m_bytesPerSector)
+		{
+			prmByteOff = prmByteOff - p->totalSector*m_bytesPerSector;
+			p = p->next;
+			if(p==NULL)
+			{
+				return tmpResult;
+			}
+		}
 	}
-	if(p->startSector + prmByteOff/512 == p->totalSector)
+
+	//计算当前块还有多少可读字节
+	UINT64	tmpRunListRemainBytes = p->totalSector * m_bytesPerSector - prmByteOff;
+	//计算文件偏移映射到磁盘后扇区值
+	UINT64	tmpOff = p->startSector + prmByteOff/512;
+	while(p && (tmpRunListRemainBytes < (prmByteToRead-tmpResult)) )
 	{
+		//整块连续扇区读取
+		tmpByteRead = this->ReadBuf(prmDstBuf+tmpResult,tmpOff,tmpRunListRemainBytes);
+		tmpResult += tmpByteRead;
+		if (tmpByteRead != tmpRunListRemainBytes)
+		{
+			return tmpResult;
+		}
 		p = p->next;
-		prmByteOff = 0;
+		if (p == NULL)
+		{
+			return tmpResult;
+		}
+		tmpRunListRemainBytes = p->totalSector*m_bytesPerSector;
+		tmpOff = p->startSector;
 	}
 
+	//循环结束，剩余请求字节数小于块的大小。
+	if(prmByteToRead!=tmpResult)
+	{
+		tmpByteRead  = this->ReadBuf(prmDstBuf + tmpResult, tmpOff, prmByteToRead-tmpResult);
+		tmpResult += tmpByteRead;
+	}
+	return tmpResult;
+#if 0
 	//当前run list还有多少字节可读
 	UINT64 runListRemainSize = p->totalSector*m_bytesPerSector - prmByteOff;
 	UINT64	fileOffset = p->startSector*m_bytesPerSector+prmByteOff;
@@ -696,6 +734,7 @@ UINT64	CNtfsFileSystem::ReadFileContent(UCHAR prmDstBuf[],UINT64 prmByteOff,UINT
 	}
 END:
 	return tmpResult;
+#endif
 }
 
 void CNtfsFileSystem::FreeFileExtent(File_Content_Extent_s *prmFileExtent)
