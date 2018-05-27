@@ -76,7 +76,7 @@ UINT64	CFat32FileSystem::ReadFileContent(CBaseFileObject *prmFileObject, UCHAR p
 		this->ReadBuf(tmpBuf, tmpFileOffset / 512, 512);
 		//ÐèÒª¶ÁÈ¡512-tmpAlignSize
 		tmpResult = 512 - tmpAlignSize;
-		int	tmpCopyBytes = prmByteToRead > 512 - tmpAlignSize ? 512 - tmpAlignSize : prmByteToRead;
+		UINT32	tmpCopyBytes = prmByteToRead > 512 - tmpAlignSize ? 512 - tmpAlignSize : (UINT32)prmByteToRead;
 		memcpy(prmDstBuf, tmpBuf + tmpAlignSize, tmpCopyBytes);
 		tmpFileOffset = tmpFileOffset + 512;
 		
@@ -411,7 +411,6 @@ UINT32 CFat32FileSystem::GetFileExtent(DIR_ENTRY_s *dirEntry, File_Content_Exten
 
 CStringUtil CFat32FileSystem::ParseCreateDate(DIR_ENTRY_s *dirEntry)
 {
-	char	szBuf[128] = { 0 };
 	USHORT	time = dirEntry->ctime;
 	USHORT	date = dirEntry->cdate;
 	UINT8   hour = (time & 0xF800) >> 11;
@@ -420,8 +419,9 @@ CStringUtil CFat32FileSystem::ParseCreateDate(DIR_ENTRY_s *dirEntry)
 	UINT8	year = (date & 0xFE00) >> 9;
 	UINT8   month = (date & 0x1E0) >> 5;
 	UINT8	day = (date & 0x1F);
-	sprintf_s(szBuf, 128, _T("%04d-%02d-%02d %02d:%02d:%02d"), year + 1980, month, day, hour, minute, second);
-	return szBuf;
+	CStringUtil		tmpResult;
+	tmpResult.Format(TEXT("%04d-%02d-%02d %02d:%02d:%02d"), year + 1980, month, day, hour, minute, second);
+	return tmpResult;
 	//fileInfo->createDate = szBuf;
 }
 
@@ -436,8 +436,9 @@ CStringUtil CFat32FileSystem::ParseModifyDate(DIR_ENTRY_s *dirEntry)
 	UINT8	year = (date & 0xFE00) >> 9;
 	UINT8   month = (date & 0x1E0) >> 5;
 	UINT8	day = (date & 0x1F);
-	sprintf_s(szBuf, 128, _T("%04d-%02d-%02d %02d:%02d:%02d"), year + 1980, month, day, hour, minute, second);
-	return szBuf;
+	CStringUtil	tmpResult;
+	tmpResult.Format(TEXT("%04d-%02d-%02d %02d:%02d:%02d"), year + 1980, month, day, hour, minute, second);
+	return tmpResult;
 	//fileInfo->modifyDate = szBuf;
 }
 
@@ -448,7 +449,7 @@ CStringUtil CFat32FileSystem::ParseAccessDate(DIR_ENTRY_s *dirEntry)
 	UINT8	year = (date & 0xFE00) >> 9;
 	UINT8   month = (date & 0x1E0) >> 5;
 	UINT8	day = (date & 0x1F);
-	sprintf_s(szBuf, 128, _T("%04d-%02d-%02d"), year + 1980, month, day);
-	return szBuf;
-	//fileInfo->modifyDate = szBuf;
+	CStringUtil	tmpResult;
+	tmpResult.Format(TEXT("%04d-%02d-%02d"), year + 1980, month, day);
+	return tmpResult;
 }

@@ -44,7 +44,7 @@ void CNtfsFileSystem::GetDeletedFiles(vector<CBaseFileObject*> &fileArray)
 	UINT32	clusterSize = m_sectorsPerCluster * m_bytesPerSector;
 	TCHAR	szFileName[MAX_PATH * 2] = { 0 };
 	TCHAR	szAnsiName[MAX_PATH * 2] = { 0 };
-	TCHAR	szAttrValue[1024] = { 0 };
+	UCHAR	szAttrValue[1024] = { 0 };
 	UINT32	nameLenOffset = 0;
 	UINT32	nameLen = 0;
 	UINT16  usnOffset = 0;
@@ -87,7 +87,9 @@ void CNtfsFileSystem::GetDeletedFiles(vector<CBaseFileObject*> &fileArray)
 					//获取文件名
 					memset(szFileName, 0, sizeof(szFileName));
 					memcpy(szFileName, szAttrValue + nameLenOffset + 2, nameLen << 1);
+#ifndef _UNICODE
 					::WideCharToMultiByte(CP_THREAD_ACP, 0, (LPCWSTR)szFileName, -1, szAnsiName, MAX_PATH * 2, 0, 0);
+#endif
 					
 					//用于设置文件内容占用了哪些扇区信息
 					File_Content_Extent_s	*fileExtents = NULL;
@@ -95,7 +97,11 @@ void CNtfsFileSystem::GetDeletedFiles(vector<CBaseFileObject*> &fileArray)
 					this->GetFileExtent(szBuf + j, clusterOffset + j / 512, &fileExtents);
 
 					CBaseFileObject	*fileObject = new CBaseFileObject;
+#ifdef _UNICODE
+					fileObject->SetFileName(szFileName);
+#else
 					fileObject->SetFileName(szAnsiName);
+#endif
 					fileObject->SetFileSize(this->GetFileSize(szBuf+j));
 					//设置文件内容占用扇区信息
 					fileObject->SetFileExtent(fileExtents);
@@ -1000,7 +1006,7 @@ CStringUtil	CNtfsFileSystem::GetAccessTime(UCHAR szBuf[])
 		UINT64 accessTime = *(UINT64*)(szAttrValue + 0x30);
 		return this->FileTimeToString(accessTime);
 	}
-	return "";
+	return TEXT("");
 }
 
 CStringUtil CNtfsFileSystem::GetModifyTime(UCHAR szBuf[])
@@ -1011,7 +1017,7 @@ CStringUtil CNtfsFileSystem::GetModifyTime(UCHAR szBuf[])
 		UINT64 modifyTime = *(UINT64*)(szAttrValue + 0x20);
 		return this->FileTimeToString(modifyTime);
 	}
-	return "";
+	return TEXT("");
 }
 
 CStringUtil CNtfsFileSystem::GetCreateTime(UCHAR szBuf[])
@@ -1023,12 +1029,12 @@ CStringUtil CNtfsFileSystem::GetCreateTime(UCHAR szBuf[])
 		UINT64 createTime = *(UINT64*)(szAttrValue + 0x18);
 		return this->FileTimeToString(createTime);
 	}
-	return "";
+	return TEXT("");
 }
 
 CStringUtil	CNtfsFileSystem::FileTimeToString(UINT64 prmFileTime)
 {
-	TCHAR	szBuf[128] = { 0 };
+	//TCHAR	szBuf[128] = { 0 };
 	FILETIME fileTime;
 	SYSTEMTIME	systemTime;
 	TIME_ZONE_INFORMATION tz;
@@ -1040,10 +1046,10 @@ CStringUtil	CNtfsFileSystem::FileTimeToString(UINT64 prmFileTime)
 	lTime -= tz.Bias;
 	systemTime.wHour = (WORD)lTime / 60;
 	systemTime.wMinute = lTime % 60;
-
-	sprintf_s(szBuf, 128, _T("%4d-%02d-%02d %02d:%02d:%02d"), systemTime.wYear, systemTime.wMonth, systemTime.wDay,
+	CStringUtil	tmpResult;
+	tmpResult.Format(TEXT("%4d-%02d-%02d %02d:%02d:%02d"), systemTime.wYear, systemTime.wMonth, systemTime.wDay,
 		systemTime.wHour, systemTime.wMinute, systemTime.wSecond);
-	return szBuf;
+	return tmpResult;
 }
 
 FILE_OBJECT_TYPE CNtfsFileSystem::GetFileType(UCHAR *prmMFTRecord)
