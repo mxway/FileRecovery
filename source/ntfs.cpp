@@ -604,7 +604,6 @@ UINT64	CNtfsFileSystem::ReadFileContent(UCHAR prmDstBuf[],UINT64 prmByteOff,UINT
 	UINT64 prmFileSize,File_Content_Extent_s *prmFileExtent)
 {
 	UINT64		tmpResult = 0;
-	UCHAR		tmpBuf[512] = {0};
 	UINT64		tmpByteRead = 0;
 	if (prmByteOff >= prmFileSize)
 	{
@@ -648,6 +647,7 @@ UINT64	CNtfsFileSystem::ReadFileContent(UCHAR prmDstBuf[],UINT64 prmByteOff,UINT
 	//处理文件偏移不是512整数倍的情况
 	if(prmByteOff %512 != 0)
 	{
+		UCHAR		tmpBuf[512] = { 0 };
 		tmpByteRead = 512 - prmByteOff%512;
 		if (prmByteToRead <= tmpByteRead)
 		{
@@ -760,7 +760,6 @@ UINT64	CNtfsFileSystem::GetOffsetByFileName(UINT64 prmParentFileOffset,const CSt
 	UCHAR		tmpBuf[1024] = {0};
 	UCHAR		tmpAttrValue[1024] = {0};
 	UCHAR		tmpAttrList[1024] = {0};
-	UCHAR		tmpExtentMFTValue[1024] = {0};
 	UINT64		tmpFileOffset = 0;
 	if(prmParentFileOffset==0)
 	{
@@ -773,6 +772,7 @@ UINT64	CNtfsFileSystem::GetOffsetByFileName(UINT64 prmParentFileOffset,const CSt
 	//获取ATTR_LIST $0x20列表属性
 	if(this->GetAttrValue(ATTR_ATTRIBUTE_LIST,tmpBuf,tmpAttrList))
 	{
+		UCHAR		tmpExtentMFTValue[1024] = { 0 };
 		UINT32	tmpOffset = 0x18;
 		while(tmpOffset=this->GetAttrFromAttributeList(ATTR_INDEX_ROOT,tmpOffset,tmpAttrList,tmpAttrValue))
 		{

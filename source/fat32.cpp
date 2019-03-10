@@ -50,7 +50,6 @@ void CFat32FileSystem::Init()
 
 UINT64	CFat32FileSystem::ReadFileContent(CBaseFileObject *prmFileObject, UCHAR prmDstBuf[], UINT64 prmByteOff, UINT64 prmByteToRead)
 {
-	UCHAR		tmpBuf[512] = { 0 };
 	UINT64		tmpResult = 0;
 	if (prmFileObject->GetFileType() != FILE_OBJECT_TYPE_FILE)
 	{
@@ -72,6 +71,7 @@ UINT64	CFat32FileSystem::ReadFileContent(CBaseFileObject *prmFileObject, UCHAR p
 	//当请求的偏移值不是512的倍数时，先读取不满512字节数据，后面再读取
 	if (tmpFileOffset % 512 != 0)
 	{
+		UCHAR		tmpBuf[512] = { 0 };
 		UINT32	tmpAlignSize = tmpFileOffset % 512;
 		this->ReadBuf(tmpBuf, tmpFileOffset / 512, 512);
 		//需要读取512-tmpAlignSize
@@ -88,86 +88,6 @@ UINT64	CFat32FileSystem::ReadFileContent(CBaseFileObject *prmFileObject, UCHAR p
 	}
 	tmpResult += this->ReadBuf(prmDstBuf + tmpResult, tmpFileOffset / 512, prmByteToRead);
 	return tmpResult;
-	/*if (tmpFileSize >= 0xFFFFFFFF)
-	{
-		return 0;
-	}
-	if (prmByteOff >= tmpFileSize)
-	{
-		return 0;
-	}
-	UINT32		tmpRemainSize = (UINT32)tmpFileSize - (UINT32)prmByteOff;
-	if (tmpRemainSize<prmByteToRead)
-	{
-		prmByteToRead = tmpRemainSize;
-	}
-	UINT32		tmpClusterSize = m_fatSector.BPB_SecPerClus*m_fatSector.BPB_BytsPerSec;
-	UINT32		tmpClusterNum = (UINT32)prmFileObject->GetFileStartSector();
-	//根据分区的扇区号计算簇号
-	tmpClusterNum -= m_fatSector.BPB_FATSz32*m_fatSector.BPB_NumFATs;
-	tmpClusterNum -= m_fatSector.BPB_ResvdSecCnt;
-	tmpClusterNum = tmpClusterNum / m_fatSector.BPB_SecPerClus + 2;
-
-	while (prmByteOff >= tmpClusterSize && tmpClusterNum)
-	{
-		prmByteOff -= tmpClusterSize;
-		tmpClusterNum = this->GetNextCluster(tmpClusterNum);
-	}
-	if (tmpClusterNum == 0)
-	{
-		//非法请求
-		return 0;
-	}
-	char	*tmpBuf = (char*)malloc(tmpClusterSize);
-	if (tmpBuf == NULL)
-	{
-		return 0;
-	}
-	UINT32 tmpOffset = m_fatSector.BPB_FATSz32*m_fatSector.BPB_NumFATs;
-	tmpOffset += m_fatSector.BPB_ResvdSecCnt;
-	tmpOffset += (tmpClusterNum - m_fatSector.BPB_RootClus)*m_fatSector.BPB_SecPerClus;
-	//读取prmByteOff所有fat32分区中的簇数据
-	UINT64 tmpRet = this->ReadBuf((UCHAR*)tmpBuf, tmpOffset, tmpClusterSize);
-	UINT64		tmpResult = 0;
-	if (prmByteToRead <= tmpClusterSize - prmByteOff)
-	{
-		//读取的数据小于一簇大小
-		memcpy(prmDstBuf, tmpBuf + (UINT32)prmByteOff, (UINT32)prmByteToRead);
-		tmpResult = prmByteToRead;
-		goto SUCCESS;
-	}
-	else
-	{
-		//将一簇中有用数据放入缓冲区
-		memcpy(prmDstBuf, tmpBuf + (UINT32)prmByteOff, tmpClusterSize - (UINT32)prmByteOff);
-		tmpResult = tmpClusterSize - prmByteOff;
-		tmpClusterNum = this->GetNextCluster(tmpClusterNum);
-		//减少待读取数据大小
-		prmByteToRead = prmByteToRead - tmpResult;
-	}
-	//剩下的数据整簇读取
-	for (int i = 0; i<prmByteToRead / tmpClusterSize; i++)
-	{
-		tmpOffset = m_fatSector.BPB_FATSz32*m_fatSector.BPB_NumFATs;
-		tmpOffset += m_fatSector.BPB_ResvdSecCnt;
-		tmpOffset += (tmpClusterNum - m_fatSector.BPB_RootClus)*m_fatSector.BPB_SecPerClus;
-		this->ReadBuf(prmDstBuf + tmpResult, tmpOffset, tmpClusterSize);
-		tmpResult += tmpClusterSize;
-		prmByteToRead = prmByteToRead - tmpClusterSize;
-		tmpClusterNum = this->GetNextCluster(tmpClusterNum);
-	}
-	//考虑可能还有数据需要读取，但不够一簇大小
-	if (prmByteToRead>0)
-	{
-		tmpOffset = m_fatSector.BPB_FATSz32*m_fatSector.BPB_NumFATs;
-		tmpOffset += m_fatSector.BPB_ResvdSecCnt;
-		tmpOffset += (tmpClusterNum - m_fatSector.BPB_RootClus)*m_fatSector.BPB_SecPerClus;
-		this->ReadBuf(prmDstBuf + tmpResult, tmpOffset, prmByteToRead);
-		tmpResult += prmByteToRead;
-	}
-SUCCESS:
-	free(tmpBuf);
-	return tmpResult;*/
 }
 
 void CFat32FileSystem::GetDeletedFiles(vector<CBaseFileObject *> &fileArray)
@@ -427,7 +347,6 @@ CStringUtil CFat32FileSystem::ParseCreateDate(DIR_ENTRY_s *dirEntry)
 
 CStringUtil CFat32FileSystem::ParseModifyDate(DIR_ENTRY_s *dirEntry)
 {
-	char	szBuf[128] = { 0 };
 	USHORT	time = dirEntry->time;
 	USHORT	date = dirEntry->date;
 	UINT8   hour = (time & 0xF800) >> 11;
@@ -444,7 +363,6 @@ CStringUtil CFat32FileSystem::ParseModifyDate(DIR_ENTRY_s *dirEntry)
 
 CStringUtil CFat32FileSystem::ParseAccessDate(DIR_ENTRY_s *dirEntry)
 {
-	char	szBuf[128] = { 0 };
 	USHORT	date = dirEntry->adate;
 	UINT8	year = (date & 0xFE00) >> 9;
 	UINT8   month = (date & 0x1E0) >> 5;

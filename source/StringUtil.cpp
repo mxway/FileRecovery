@@ -70,10 +70,7 @@ CStringUtil &CStringUtil::operator=(const CStringUtil &prmObj)
 //Îö¹¹
 CStringUtil::~CStringUtil()
 {
-	if (m_Buf)
-	{
-		free(m_Buf);
-	}
+	free(m_Buf);
 	m_Buf = NULL;
 	m_BufLen = 0;
 	m_Capacity = 0;
@@ -660,9 +657,9 @@ CStringUtil CStringUtil::ReplaceStr(TCHAR *prmSrc, TCHAR *prmDst)
 	UINT32 tmpLastPos = 0;
 	UINT32 tmpPos = 0;
 
+	int		tmpLen = _tcslen(prmSrc);
 	while (tmpPos <= m_BufLen)
 	{
-		int		tmpLen = _tcslen(prmSrc);
 		BOOL	tmpFlag = TRUE;
 		for(int i=0;i<tmpLen;i++)
 		{
@@ -676,8 +673,8 @@ CStringUtil CStringUtil::ReplaceStr(TCHAR *prmSrc, TCHAR *prmDst)
 		{
 			tmpResult.Append(m_Buf, tmpLastPos, tmpPos - tmpLastPos);
 			tmpResult.Append(prmDst);
-			tmpLastPos = tmpPos + _tcslen(prmSrc);
-			tmpPos += _tcslen(prmSrc);
+			tmpLastPos = tmpPos + tmpLen;
+			tmpPos += tmpLen;
 			continue;
 		}
 		/*if (_tcsncmp(m_Buf + tmpPos, prmSrc, _tcslen(prmSrc) * sizeof(TCHAR)) == 0)
